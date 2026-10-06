@@ -70,9 +70,16 @@ export interface TriageResult {
 }
 
 /** The stored result for a visit, tied to the exact version it evaluated. */
+/** The stored result for a visit, tied to the exact version it evaluated. */
 export interface TriageAssessment extends TriageResult {
   encounterId: string;
   encounterVersion: number;
   createdAt: string;
+  /** Priority confirmed or changed by the health promoter: the AI never decides alone. */
+  finalPriority?: Priority;
+  /** Required when the promoter lowers the suggested priority. */
+  reviewNote?: string;
+  reviewedAt?: string;
 }
+
 
