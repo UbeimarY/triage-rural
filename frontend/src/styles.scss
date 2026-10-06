@@ -1,0 +1,127 @@
+// ---------- Design tokens ----------
+:root {
+  --color-bg: #f4f6f5;
+  --color-surface: #ffffff;
+  --color-text: #1b2621;
+  --color-muted: #55645d;
+  --color-border: #d3dcd8;
+  --color-primary: #0f6e56;
+  --color-primary-dark: #0a5241;
+  --color-focus: #1a5fd0;
+  --color-danger: #b3261e;
+
+  // Priority colors. Always paired with text and an icon: never color alone.
+  --priority-high: #a3221b;
+  --priority-high-bg: #fde8e6;
+  --priority-medium: #7a4a00;
+  --priority-medium-bg: #fff0d4;
+  --priority-low: #1c6638;
+  --priority-low-bg: #e2f3e7;
+
+  --radius: 12px;
+  --touch-target: 48px; // minimum recommended size for touch targets
+  --space: 1rem;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 100%; // respects the user's browser font-size setting
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  font-size: 1.0625rem; // 17px: comfortable to read outdoors on a phone
+  line-height: 1.5;
+  color: var(--color-text);
+  background: var(--color-bg);
+}
+
+h1, h2, h3 {
+  line-height: 1.25;
+  margin: 0 0 0.75rem;
+}
+
+a {
+  color: var(--color-primary-dark);
+}
+
+// ---------- Form controls and buttons ----------
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: var(--touch-target);
+  padding: 0.75rem 1.25rem;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--color-primary);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--color-primary-dark);
+  }
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  min-height: var(--touch-target);
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+// Visible focus for keyboard users
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+// ---------- Utilities ----------
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+// Respect users who prefer less motion
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition: none !important;
+  }
+}
