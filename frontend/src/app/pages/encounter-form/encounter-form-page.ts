@@ -4,6 +4,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EncounterRepository } from '../../core/db/encounter.repository';
 import { Sex } from '../../core/db/models';
 import { ALARM_SIGNS } from '../../core/triage/alarm-signs';
+import { TriageRunner } from '../../core/triage/triage-runner.service';
 
 type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven';
 
@@ -128,6 +129,7 @@ export class EncounterFormPage {
   private readonly fb = inject(FormBuilder);
   private readonly repository = inject(EncounterRepository);
   private readonly router = inject(Router);
+    private readonly triageRunner = inject(TriageRunner);
   private readonly encounterId = inject(ActivatedRoute).snapshot.paramMap.get('id');
 
   readonly isEdit = this.encounterId !== null;
@@ -182,22 +184,25 @@ export class EncounterFormPage {
     this.error.set(null);
     const value = this.form.getRawValue();
 
-    try {
-      if (this.encounterId) {
-        await this.repository.updateEncounter(this.encounterId, {
-          symptoms: value.symptoms,
-          alarms: value.alarms,
-        });
-      } else {
-        await this.repository.registerVisit({
-          birthYear: value.birthYear!,
-          sex: value.sex as Sex,
-          community: value.community,
-          symptoms: value.symptoms,
-          alarms: value.alarms,
-          consentGiven: value.consentGiven,
-        });
-      }
+        try {
+      const encounter = this.encounterId
+        ? await this.repository.updateEncounter(this.encounterId, {
+            symptoms: value.symptoms,
+            alarms: value.alarms,
+          })
+        : (
+            await this.repository.registerVisit({
+              birthYear: value.birthYear!,
+              sex: value.sex as Sex,
+              community: value.community,
+              symptoms: value.symptoms,
+              alarms: value.alarms,
+              consentGiven: value.consentGiven,
+            })
+          ).encounter;
+
+      // Classification runs in the background: we navigate immediately, without waiting for it
+      this.triageRunner.run(encounter);
       await this.router.navigate(['/patients'], { state: { saved: true } });
     } catch {
       this.error.set('No se pudo guardar en el dispositivo. Verifica el espacio disponible e inténtalo de nuevo.');

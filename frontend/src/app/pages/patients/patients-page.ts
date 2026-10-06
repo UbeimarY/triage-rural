@@ -2,9 +2,11 @@ import { DatePipe } from '@angular/common';
 import { Component, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { EncounterRepository } from '../../core/db/encounter.repository';
+import { EncounterRepository, VisitSummary } from '../../core/db/encounter.repository';
 import { SyncStatus } from '../../core/db/models';
-import { countAlarms } from '../../core/triage/alarm-signs';
+import { ALARM_SIGNS } from '../../core/triage/alarm-signs';
+import { TriageRunner } from '../../core/triage/triage-runner.service';
+import { PriorityBadge } from '../../shared/priority-badge';
 
 const SYNC_LABELS: Record<SyncStatus, string> = {
   pending: '⏳ Pendiente de sincronizar',
@@ -14,7 +16,7 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
 
 @Component({
   selector: 'app-patients-page',
-  imports: [DatePipe, RouterLink],
+  imports: [DatePipe, RouterLink, PriorityBadge],
   template: `
     <div class="page-header">
       <h1>Pacientes</h1>
@@ -39,22 +41,24 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
             <li class="card visit">
               <div class="row">
                 <strong>Paciente {{ visit.patient.code }}</strong>
-                <span class="sync" [attr.data-status]="visit.encounter.syncStatus">
-                  {{ syncLabel(visit.encounter.syncStatus) }}
-                </span>
+                <app-priority-badge [priority]="visit.assessment?.priority" />
               </div>
               <p class="meta">
                 ≈ {{ age(visit.patient.birthYear) }} años · {{ visit.patient.community }} ·
                 {{ visit.encounter.updatedAt | date: 'd MMM, h:mm a' }}
               </p>
               <p class="symptoms">{{ visit.encounter.symptoms }}</p>
-              @if (alarmCount(visit) > 0) {
-                <p class="alarms">
-                  <span aria-hidden="true">⚠</span>
-                  {{ alarmCount(visit) }} {{ alarmCount(visit) === 1 ? 'signo' : 'signos' }} de alarma
+              @if (visit.assessment) {
+                <p class="reason" [class.alarm]="visit.assessment.triggeredAlarms.length > 0">
+                  {{ reasonText(visit) }}
                 </p>
               }
-              <a class="button secondary" [routerLink]="['/encounters', visit.encounter.id, 'edit']">Editar</a>
+              <div class="row">
+                <span class="sync" [attr.data-status]="visit.encounter.syncStatus">
+                  {{ syncLabel(visit.encounter.syncStatus) }}
+                </span>
+                <a class="button secondary" [routerLink]="['/encounters', visit.encounter.id, 'edit']">Editar</a>
+              </div>
             </li>
           }
         </ul>
@@ -77,19 +81,17 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
     .visit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
     .visit { display: flex; flex-direction: column; gap: 0.4rem; }
     .row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-    .sync { font-size: 0.8rem; font-weight: 700; color: var(--priority-medium); }
-    .sync[data-status='synced'] { color: var(--priority-low); }
-    .sync[data-status='error'] { color: var(--color-danger); }
     .meta, .muted { margin: 0; color: var(--color-muted); font-size: 0.9rem; }
     .symptoms {
       margin: 0;
       display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
-    .alarms { margin: 0; color: var(--priority-high); font-weight: 700; }
-    .secondary {
-      align-self: flex-start;
-      background: var(--color-surface); color: var(--color-primary-dark); border: 1px solid var(--color-primary);
-    }
+    .reason { margin: 0; font-size: 0.9rem; color: var(--color-muted); }
+    .reason.alarm { color: var(--priority-high); font-weight: 700; }
+    .sync { font-size: 0.8rem; font-weight: 700; color: var(--priority-medium); }
+    .sync[data-status='synced'] { color: var(--priority-low); }
+    .sync[data-status='error'] { color: var(--color-danger); }
+    .secondary { background: var(--color-surface); color: var(--color-primary-dark); border: 1px solid var(--color-primary); }
     .secondary:hover { background: var(--color-bg); }
   `,
 })
@@ -106,6 +108,8 @@ export class PatientsPage {
     if (this.justSaved()) {
       history.replaceState({ ...history.state, saved: false }, '');
     }
+    // Classify any visit left without a result
+    void inject(TriageRunner).classifyMissing();
   }
 
   syncLabel(status: SyncStatus): string {
@@ -116,7 +120,15 @@ export class PatientsPage {
     return this.currentYear - birthYear;
   }
 
-  alarmCount(visit: { encounter: { alarms: Parameters<typeof countAlarms>[0] } }): number {
-    return countAlarms(visit.encounter.alarms);
+  reasonText(visit: VisitSummary): string {
+    const assessment = visit.assessment;
+    if (!assessment) return '';
+    if (assessment.triggeredAlarms.length > 0) {
+      const names = assessment.triggeredAlarms.map(
+        (key) => ALARM_SIGNS.find((sign) => sign.key === key)?.shortLabel ?? key,
+      );
+      return `⚠ Regla de alarma: ${names.join(', ')}`;
+    }
+    return 'Sin signos de alarma · prioridad provisional, revísala según tu criterio';
   }
 }

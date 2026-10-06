@@ -37,7 +37,7 @@ export interface Encounter {
   syncStatus: SyncStatus;
 }
 
-export type OutboxEntity = 'patient' | 'encounter';
+export type OutboxEntity = 'patient' | 'encounter' | 'assessment';
 export type OutboxOperationType = 'create' | 'update';
 
 /** A pending change waiting to be sent to the server (outbox pattern). */
@@ -52,3 +52,27 @@ export interface OutboxOperation {
   createdAt: string;
   attempts: number;
 }
+
+export type Priority = 'high' | 'medium' | 'low';
+export type TriageSource = 'rules' | 'model';
+
+/** Stable codes: the UI translates them into Spanish. */
+export type TriageReasonCode = 'ALARM_SIGNS_PRESENT' | 'NO_ALARM_SIGNS';
+
+export interface TriageResult {
+  priority: Priority;
+  source: TriageSource;
+  triggeredAlarms: (keyof AlarmAnswers)[];
+  reasonCodes: TriageReasonCode[];
+  /** Null while the decision comes only from rules. */
+  modelVersion: string | null;
+  elapsedMs: number;
+}
+
+/** The stored result for a visit, tied to the exact version it evaluated. */
+export interface TriageAssessment extends TriageResult {
+  encounterId: string;
+  encounterVersion: number;
+  createdAt: string;
+}
+
