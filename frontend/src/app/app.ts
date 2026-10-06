@@ -1,5 +1,7 @@
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { AppUpdateService } from './core/app-update.service';
+import { ConnectivityService } from './core/connectivity.service';
 
 @Component({
   selector: 'app-root',
@@ -9,7 +11,27 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
     <header class="app-header">
       <span class="brand"><span aria-hidden="true">✚</span> Triage Rural</span>
+      <span class="status" [class.offline]="!connectivity.online()" role="status">
+        @if (connectivity.online()) {
+          <span aria-hidden="true">●</span> En línea
+        } @else {
+          <span aria-hidden="true">○</span> Sin conexión
+        }
+      </span>
     </header>
+
+    @if (!connectivity.online()) {
+      <p class="offline-banner" role="status">
+        Estás sin conexión. La aplicación sigue funcionando.
+      </p>
+    }
+
+    @if (updates.updateAvailable()) {
+      <div class="update-banner" role="status">
+        <span>Hay una nueva versión disponible.</span>
+        <button type="button" (click)="updates.applyUpdate()">Actualizar</button>
+      </div>
+    }
 
     <p class="safety-notice" role="note">
       <span aria-hidden="true">⚕</span>
@@ -55,6 +77,10 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
       position: sticky;
       top: 0;
       z-index: 5;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
       padding: 0.9rem 1rem;
       padding-top: calc(0.9rem + env(safe-area-inset-top));
       background: var(--color-primary);
@@ -63,6 +89,38 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     .brand {
       font-size: 1.2rem;
       font-weight: 700;
+    }
+
+    .status {
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.18);
+      font-size: 0.85rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .status.offline {
+      background: #fff;
+      color: var(--priority-medium);
+    }
+
+    .offline-banner,
+    .update-banner {
+      margin: 0;
+      padding: 0.7rem 1rem;
+      font-weight: 600;
+    }
+    .offline-banner {
+      background: var(--priority-medium-bg);
+      color: var(--priority-medium);
+    }
+    .update-banner {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      background: #e3ecfb;
+      color: #173d7a;
     }
 
     .safety-notice {
@@ -115,4 +173,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     }
   `,
 })
-export class App {}
+export class App {
+  readonly connectivity = inject(ConnectivityService);
+  readonly updates = inject(AppUpdateService);
+}
