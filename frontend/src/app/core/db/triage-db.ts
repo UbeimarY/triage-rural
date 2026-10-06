@@ -1,11 +1,12 @@
 import { InjectionToken } from '@angular/core';
 import Dexie, { type EntityTable } from 'dexie';
-import { Encounter, OutboxOperation, Patient } from './models';
+import { Encounter, OutboxOperation, Patient, TriageAssessment } from './models';
 
 export class TriageDatabase extends Dexie {
   patients!: EntityTable<Patient, 'id'>;
   encounters!: EntityTable<Encounter, 'id'>;
   outbox!: EntityTable<OutboxOperation, 'id'>;
+  assessments!: EntityTable<TriageAssessment, 'encounterId'>;
 
   constructor(name = 'triage-rural') {
     super(name);
@@ -17,6 +18,12 @@ export class TriageDatabase extends Dexie {
       encounters: 'id, patientId, syncStatus, updatedAt',
       outbox: 'id, createdAt, entityId',
     });
+
+        // Version 2: adds triage assessments (one per visit). Existing data is kept.
+    this.version(2).stores({
+      assessments: 'encounterId, priority',
+    });
+    
   }
 }
 

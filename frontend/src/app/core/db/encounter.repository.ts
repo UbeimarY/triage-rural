@@ -10,6 +10,8 @@ import {
   OutboxOperationType,
   Patient,
   Sex,
+  TriageAssessment,
+  TriageResult,
 } from './models';
 import { TRIAGE_DB } from './triage-db';
 
@@ -30,6 +32,8 @@ export interface EncounterChanges {
 export interface VisitSummary {
   patient: Patient;
   encounter: Encounter;
+  /** Only present when it matches the current version of the visit. */
+  assessment?: TriageAssessment;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -73,8 +77,8 @@ export class EncounterRepository {
       await this.db.patients.add(patient);
       await this.db.encounters.add(encounter);
       await this.db.outbox.bulkAdd([
-        createOperation('patient', 'create', patient),
-        createOperation('encounter', 'create', encounter),
+        createOperation('patient', 'create', patient.id, toPayload(patient)),
+        createOperation('encounter', 'create', encounter.id, toPayload(encounter)),
       ]);
     });
 
@@ -100,9 +104,45 @@ export class EncounterRepository {
       };
 
       await this.db.encounters.put(updated);
-      await this.db.outbox.add(createOperation('encounter', 'update', updated, current.version));
+      await this.db.outbox.add(
+        createOperation('encounter', 'update', updated.id, toPayload(updated), current.version),
+      );
       return updated;
     });
+  }
+
+  /**
+   * Stores the triage result for a visit. Returns false and discards the result
+   * if the visit was edited while it was being classified (stale result).
+   */
+  async saveAssessment(encounterId: string, encounterVersion: number, result: TriageResult): Promise<boolean> {
+    return this.db.transaction('rw', [this.db.encounters, this.db.assessments, this.db.outbox], async () => {
+      const encounter = await this.db.encounters.get(encounterId);
+      if (!encounter || encounter.version !== encounterVersion) {
+        return false;
+      }
+
+      const existing = await this.db.assessments.get(encounterId);
+      const assessment: TriageAssessment = {
+        ...result,
+        encounterId,
+        encounterVersion,
+        createdAt: new Date().toISOString(),
+      };
+
+      await this.db.assessments.put(assessment);
+      await this.db.outbox.add(
+        createOperation('assessment', existing ? 'update' : 'create', encounterId, { ...assessment }),
+      );
+      return true;
+    });
+  }
+
+  /** Visits without a result for their current version (e.g. the app closed mid-classification). */
+  async encountersNeedingTriage(): Promise<Encounter[]> {
+    const encounters = await this.db.encounters.toArray();
+    const assessments = await this.db.assessments.bulkGet(encounters.map((e) => e.id));
+    return encounters.filter((e, i) => assessments[i]?.encounterVersion !== e.version);
   }
 
   async getVisit(encounterId: string): Promise<VisitSummary | undefined> {
@@ -117,15 +157,26 @@ export class EncounterRepository {
     return from(
       liveQuery(async () => {
         const encounters = await this.db.encounters.orderBy('updatedAt').reverse().toArray();
-        const patientIds = [...new Set(encounters.map((e) => e.patientId))];
-        const patients = await this.db.patients.bulkGet(patientIds);
-        const byId = new Map<string, Patient>();
+        const patients = await this.db.patients.bulkGet([...new Set(encounters.map((e) => e.patientId))]);
+        const assessments = await this.db.assessments.bulkGet(encounters.map((e) => e.id));
+
+        const patientsById = new Map<string, Patient>();
         for (const patient of patients) {
-          if (patient) byId.set(patient.id, patient);
+          if (patient) patientsById.set(patient.id, patient);
         }
-        return encounters
-          .filter((e) => byId.has(e.patientId))
-          .map((e) => ({ encounter: e, patient: byId.get(e.patientId)! }));
+
+        const visits: VisitSummary[] = [];
+        encounters.forEach((encounter, i) => {
+          const patient = patientsById.get(encounter.patientId);
+          if (!patient) return;
+          const assessment = assessments[i];
+          visits.push({
+            patient,
+            encounter,
+            assessment: assessment?.encounterVersion === encounter.version ? assessment : undefined,
+          });
+        });
+        return visits;
       }),
     );
   }
@@ -141,20 +192,25 @@ function toPatientCode(id: string): string {
   return `P-${id.slice(0, 6).toUpperCase()}`;
 }
 
+/** syncStatus is local information: it is never sent to the server. */
+function toPayload(record: Patient | Encounter): Record<string, unknown> {
+  const { syncStatus, ...payload } = record;
+  return { ...payload };
+}
+
 function createOperation(
   entity: OutboxEntity,
   type: OutboxOperationType,
-  record: Patient | Encounter,
+  entityId: string,
+  payload: Record<string, unknown>,
   baseVersion?: number,
 ): OutboxOperation {
-  // syncStatus is local information: it is never sent to the server
-  const { syncStatus, ...payload } = record;
   return {
     id: newId(),
     entity,
-    entityId: record.id,
+    entityId,
     type,
-    payload: { ...payload },
+    payload,
     baseVersion,
     createdAt: new Date().toISOString(),
     attempts: 0,

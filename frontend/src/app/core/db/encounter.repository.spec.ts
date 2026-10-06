@@ -2,6 +2,7 @@ import 'fake-indexeddb/auto';
 import { TestBed } from '@angular/core/testing';
 import { NO_ALARMS } from '../triage/alarm-signs';
 import { EncounterRepository, NewVisitInput } from './encounter.repository';
+import { TriageResult } from './models';
 import { TRIAGE_DB, TriageDatabase } from './triage-db';
 
 const visitInput: NewVisitInput = {
@@ -11,6 +12,15 @@ const visitInput: NewVisitInput = {
   symptoms: 'Fiebre y dolor de cabeza desde ayer',
   alarms: NO_ALARMS,
   consentGiven: true,
+};
+
+const sampleResult: TriageResult = {
+  priority: 'medium',
+  source: 'rules',
+  triggeredAlarms: [],
+  reasonCodes: ['NO_ALARM_SIGNS'],
+  modelVersion: null,
+  elapsedMs: 1,
 };
 
 describe('EncounterRepository', () => {
@@ -69,5 +79,29 @@ describe('EncounterRepository', () => {
       'CONSENT_REQUIRED',
     );
     expect(await db.patients.count()).toBe(0);
+  });
+
+    it('should store an assessment and queue it for sync', async () => {
+    const { encounter } = await repository.registerVisit(visitInput);
+
+    const saved = await repository.saveAssessment(encounter.id, encounter.version, sampleResult);
+
+    expect(saved).toBe(true);
+    expect((await db.assessments.get(encounter.id))?.priority).toBe('medium');
+    expect((await db.outbox.toArray()).some((o) => o.entity === 'assessment')).toBe(true);
+  });
+
+  it('should discard a stale assessment when the visit was edited meanwhile', async () => {
+    const { encounter } = await repository.registerVisit(visitInput);
+    await repository.updateEncounter(encounter.id, {
+      symptoms: 'Fiebre alta y escalofríos',
+      alarms: NO_ALARMS,
+    });
+
+    // The classification started with version 1, but the visit is now at version 2
+    const saved = await repository.saveAssessment(encounter.id, 1, sampleResult);
+
+    expect(saved).toBe(false);
+    expect(await db.assessments.get(encounter.id)).toBeUndefined();
   });
 });
