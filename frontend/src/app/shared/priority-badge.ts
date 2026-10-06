@@ -1,7 +1,7 @@
 import { Component, computed, input } from '@angular/core';
 import { Priority } from '../core/db/models';
 
-const DISPLAY: Record<Priority | 'pending', { icon: string; label: string }> = {
+export const PRIORITY_DISPLAY: Record<Priority | 'pending', { icon: string; label: string }> = {
   high: { icon: '▲', label: 'Prioridad alta' },
   medium: { icon: '■', label: 'Prioridad intermedia' },
   low: { icon: '▼', label: 'Prioridad baja' },
@@ -32,5 +32,5 @@ const DISPLAY: Record<Priority | 'pending', { icon: string; label: string }> = {
 export class PriorityBadge {
   readonly priority = input<Priority | undefined>(undefined);
   readonly key = computed(() => this.priority() ?? 'pending');
-  readonly display = computed(() => DISPLAY[this.key()]);
+  readonly display = computed(() => PRIORITY_DISPLAY[this.key()]);
 }
