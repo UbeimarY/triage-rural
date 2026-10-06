@@ -104,4 +104,35 @@ describe('EncounterRepository', () => {
     expect(saved).toBe(false);
     expect(await db.assessments.get(encounter.id)).toBeUndefined();
   });
+
+    it('should record the promoter review and queue it for sync', async () => {
+    const { encounter } = await repository.registerVisit(visitInput);
+    await repository.saveAssessment(encounter.id, 1, sampleResult);
+
+    await repository.reviewAssessment(encounter.id, 1, 'high', '');
+
+    const stored = await db.assessments.get(encounter.id);
+    expect(stored?.priority).toBe('medium');
+    expect(stored?.finalPriority).toBe('high');
+    expect(stored?.reviewedAt).toBeDefined();
+    const updates = (await db.outbox.toArray()).filter((o) => o.entity === 'assessment' && o.type === 'update');
+    expect(updates.length).toBe(1);
+  });
+
+  it('should require a reason when the promoter lowers the suggested priority', async () => {
+    const { encounter } = await repository.registerVisit(visitInput);
+    await repository.saveAssessment(encounter.id, 1, {
+      ...sampleResult,
+      priority: 'high',
+      triggeredAlarms: ['chestPain'],
+      reasonCodes: ['ALARM_SIGNS_PRESENT'],
+    });
+
+    await expect(repository.reviewAssessment(encounter.id, 1, 'medium', '')).rejects.toThrow(
+      'REVIEW_NOTE_REQUIRED',
+    );
+
+    await repository.reviewAssessment(encounter.id, 1, 'medium', 'Dolor por un golpe leve, ya evaluado');
+    expect((await db.assessments.get(encounter.id))?.finalPriority).toBe('medium');
+  });
 });

@@ -9,11 +9,13 @@ import {
   OutboxOperation,
   OutboxOperationType,
   Patient,
+  Priority,
   Sex,
   TriageAssessment,
   TriageResult,
 } from './models';
 import { TRIAGE_DB } from './triage-db';
+import { isLowering } from '../triage/priority-order';
 
 export interface NewVisitInput {
   birthYear: number;
@@ -122,6 +124,7 @@ export class EncounterRepository {
         return false;
       }
 
+
       const existing = await this.db.assessments.get(encounterId);
       const assessment: TriageAssessment = {
         ...result,
@@ -135,6 +138,40 @@ export class EncounterRepository {
         createOperation('assessment', existing ? 'update' : 'create', encounterId, { ...assessment }),
       );
       return true;
+    });
+  }
+
+    /**
+   * Records the promoter's decision about the suggested priority.
+   * Lowering the suggestion requires a written reason.
+   */
+  async reviewAssessment(
+    encounterId: string,
+    encounterVersion: number,
+    finalPriority: Priority,
+    note: string,
+  ): Promise<TriageAssessment> {
+    return this.db.transaction('rw', [this.db.assessments, this.db.outbox], async () => {
+      const current = await this.db.assessments.get(encounterId);
+      if (!current || current.encounterVersion !== encounterVersion) {
+        throw new Error('ASSESSMENT_OUTDATED');
+      }
+
+      const reason = note.trim();
+      if (isLowering(current.priority, finalPriority) && reason.length < 5) {
+        throw new Error('REVIEW_NOTE_REQUIRED');
+      }
+
+      const reviewed: TriageAssessment = {
+        ...current,
+        finalPriority,
+        reviewNote: reason || undefined,
+        reviewedAt: new Date().toISOString(),
+      };
+
+      await this.db.assessments.put(reviewed);
+      await this.db.outbox.add(createOperation('assessment', 'update', encounterId, { ...reviewed }));
+      return reviewed;
     });
   }
 
