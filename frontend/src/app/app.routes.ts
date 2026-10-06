@@ -13,6 +13,14 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/encounter-form/encounter-form-page').then((m) => m.EncounterFormPage),
   },
+
+    {
+    path: 'encounters/:id/edit',
+    title: 'Editar registro · Triage Rural',
+    loadComponent: () =>
+      import('./pages/encounter-form/encounter-form-page').then((m) => m.EncounterFormPage),
+  },
+  
   {
     path: '**',
     title: 'Página no encontrada · Triage Rural',
