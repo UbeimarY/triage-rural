@@ -11,7 +11,7 @@ export const routes: Routes = [
     path: 'encounters/new',
     title: 'Nuevo registro · Triage Rural',
     loadComponent: () =>
-      import('./pages/new-encounter/new-encounter-page').then((m) => m.NewEncounterPage),
+      import('./pages/encounter-form/encounter-form-page').then((m) => m.EncounterFormPage),
   },
   {
     path: '**',
