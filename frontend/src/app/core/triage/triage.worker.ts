@@ -1,13 +1,18 @@
 /// <reference lib="webworker" />
 
+import { TRIAGE_TEXT_MODEL } from './model';
 import { runClassification } from './triage-engine';
 import { TriageRequest, TriageResponse } from './triage-protocol';
 
-// Runs in a separate thread: it can never freeze the user interface.
+// Runs in a separate thread: model inference can never freeze the user interface.
 addEventListener('message', ({ data }: MessageEvent<TriageRequest>) => {
   let response: TriageResponse;
   try {
-    response = { requestId: data.requestId, ok: true, result: runClassification(data) };
+    response = {
+      requestId: data.requestId,
+      ok: true,
+      result: runClassification(data, TRIAGE_TEXT_MODEL),
+    };
   } catch (error) {
     response = {
       requestId: data.requestId,

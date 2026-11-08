@@ -105,7 +105,11 @@ const FILTERS: { value: Filter; label: string }[] = [
                 @if (reviewing() === visit.encounter.id) {
                   <app-priority-review [assessment]="assessment" (closed)="reviewing.set(null)" />
                 } @else {
-                  <button type="button" class="review-button" (click)="reviewing.set(visit.encounter.id)">
+                  <button
+                    type="button"
+                    class="review-button"
+                    (click)="reviewing.set(visit.encounter.id)"
+                  >
                     {{ assessment.reviewedAt ? 'Cambiar revisión' : 'Revisar prioridad' }}
                   </button>
                 }
@@ -115,7 +119,11 @@ const FILTERS: { value: Filter; label: string }[] = [
                 <span class="sync" [attr.data-status]="visit.encounter.syncStatus">
                   {{ syncLabel(visit.encounter.syncStatus) }}
                 </span>
-                <a class="button secondary" [routerLink]="['/encounters', visit.encounter.id, 'edit']">Editar</a>
+                <a
+                  class="button secondary"
+                  [routerLink]="['/encounters', visit.encounter.id, 'edit']"
+                  >Editar</a
+                >
               </div>
             </li>
           } @empty {
@@ -128,44 +136,147 @@ const FILTERS: { value: Filter; label: string }[] = [
     }
   `,
   styles: `
-    .page-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
     .pending-pill {
-      padding: 0.25rem 0.7rem; border-radius: 999px;
-      background: var(--priority-medium-bg); color: var(--priority-medium);
-      font-size: 0.85rem; font-weight: 700;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      background: var(--priority-medium-bg);
+      color: var(--priority-medium);
+      font-size: 0.85rem;
+      font-weight: 700;
     }
-    .saved { padding: 0.7rem 1rem; border-radius: var(--radius); background: var(--priority-low-bg); color: var(--priority-low); font-weight: 600; }
-    .empty-state { display: flex; flex-direction: column; align-items: center; gap: 1rem; text-align: center; }
+    .saved {
+      padding: 0.7rem 1rem;
+      border-radius: var(--radius);
+      background: var(--priority-low-bg);
+      color: var(--priority-low);
+      font-weight: 600;
+    }
+    .empty-state {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      text-align: center;
+    }
 
-    .summary { margin: 0 0 0.75rem; }
-    .filters { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .summary {
+      margin: 0 0 0.75rem;
+    }
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
     .chip {
-      background: var(--color-surface); color: var(--color-text);
-      border: 1px solid var(--color-border); border-radius: 999px; padding: 0.5rem 1rem;
+      background: var(--color-surface);
+      color: var(--color-text);
+      border: 1px solid var(--color-border);
+      border-radius: 999px;
+      padding: 0.5rem 1rem;
     }
-    .chip:hover:not(:disabled) { background: var(--color-bg); }
-    .chip.active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
-    .order-note { margin: 0.75rem 0; color: var(--color-muted); font-size: 0.85rem; }
+    .chip:hover:not(:disabled) {
+      background: var(--color-bg);
+    }
+    .chip.active {
+      background: var(--color-primary);
+      color: #fff;
+      border-color: var(--color-primary);
+    }
+    .order-note {
+      margin: 0.75rem 0;
+      color: var(--color-muted);
+      font-size: 0.85rem;
+    }
 
-    .visit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.75rem; }
-    .visit { display: flex; flex-direction: column; gap: 0.4rem; }
-    .row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-    .meta, .muted { margin: 0; color: var(--color-muted); font-size: 0.9rem; }
-    .symptoms { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .reason { margin: 0; font-size: 0.9rem; color: var(--color-muted); }
-    .reason.alarm { color: var(--priority-high); font-weight: 700; }
-    .reviewed { margin: 0; font-size: 0.9rem; color: var(--priority-low); font-weight: 700; }
-    .note { margin: 0; font-size: 0.9rem; color: var(--color-muted); font-style: italic; }
+    .visit-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .visit {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+    .meta,
+    .muted {
+      margin: 0;
+      color: var(--color-muted);
+      font-size: 0.9rem;
+    }
+    .symptoms {
+      margin: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .reason {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--color-muted);
+    }
+    .reason.alarm {
+      color: var(--priority-high);
+      font-weight: 700;
+    }
+    .reviewed {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--priority-low);
+      font-weight: 700;
+    }
+    .note {
+      margin: 0;
+      font-size: 0.9rem;
+      color: var(--color-muted);
+      font-style: italic;
+    }
     .review-button {
       align-self: flex-start;
-      background: var(--color-surface); color: var(--color-primary-dark); border: 1px dashed var(--color-primary);
+      background: var(--color-surface);
+      color: var(--color-primary-dark);
+      border: 1px dashed var(--color-primary);
     }
-    .review-button:hover:not(:disabled) { background: var(--color-bg); }
-    .sync { font-size: 0.8rem; font-weight: 700; color: var(--priority-medium); }
-    .sync[data-status='synced'] { color: var(--priority-low); }
-    .sync[data-status='error'] { color: var(--color-danger); }
-    .secondary { background: var(--color-surface); color: var(--color-primary-dark); border: 1px solid var(--color-primary); }
-    .secondary:hover { background: var(--color-bg); }
+    .review-button:hover:not(:disabled) {
+      background: var(--color-bg);
+    }
+    .sync {
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: var(--priority-medium);
+    }
+    .sync[data-status='synced'] {
+      color: var(--priority-low);
+    }
+    .sync[data-status='error'] {
+      color: var(--color-danger);
+    }
+    .secondary {
+      background: var(--color-surface);
+      color: var(--color-primary-dark);
+      border: 1px solid var(--color-primary);
+    }
+    .secondary:hover {
+      background: var(--color-bg);
+    }
   `,
 })
 export class PatientsPage {
@@ -183,7 +294,9 @@ export class PatientsPage {
   readonly shown = computed(() => {
     const ordered = sortByAttention(this.visits() ?? []);
     const filter = this.filter();
-    return filter === 'all' ? ordered : ordered.filter((v) => effectivePriority(v.assessment) === filter);
+    return filter === 'all'
+      ? ordered
+      : ordered.filter((v) => effectivePriority(v.assessment) === filter);
   });
 
   readonly counts = computed(() => {
@@ -227,6 +340,11 @@ export class PatientsPage {
         (key) => ALARM_SIGNS.find((sign) => sign.key === key)?.shortLabel ?? key,
       );
       return `⚠ Regla de alarma: ${names.join(', ')}`;
+    }
+    if (assessment.source === 'model' && assessment.probabilities) {
+      const confidence = Math.round(assessment.probabilities[assessment.priority] * 100);
+      const terms = assessment.topTerms?.length ? ` por «${assessment.topTerms.join('», «')}»` : '';
+      return `Sugerencia de la IA${terms} · confianza ${confidence} %`;
     }
     return 'Sin signos de alarma · prioridad provisional, revísala según tu criterio';
   }

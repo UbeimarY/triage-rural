@@ -57,7 +57,7 @@ export type Priority = 'high' | 'medium' | 'low';
 export type TriageSource = 'rules' | 'model';
 
 /** Stable codes: the UI translates them into Spanish. */
-export type TriageReasonCode = 'ALARM_SIGNS_PRESENT' | 'NO_ALARM_SIGNS';
+export type TriageReasonCode = 'ALARM_SIGNS_PRESENT' | 'NO_ALARM_SIGNS' | 'MODEL_PREDICTION';
 
 export interface TriageResult {
   priority: Priority;
@@ -66,10 +66,13 @@ export interface TriageResult {
   reasonCodes: TriageReasonCode[];
   /** Null while the decision comes only from rules. */
   modelVersion: string | null;
+  /** Model decisions only: probability of each priority. */
+  probabilities?: Record<Priority, number>;
+  /** Model decisions only: the words that weighed the most (the explanation). */
+  topTerms?: string[];
   elapsedMs: number;
 }
 
-/** The stored result for a visit, tied to the exact version it evaluated. */
 /** The stored result for a visit, tied to the exact version it evaluated. */
 export interface TriageAssessment extends TriageResult {
   encounterId: string;
@@ -81,5 +84,3 @@ export interface TriageAssessment extends TriageResult {
   reviewNote?: string;
   reviewedAt?: string;
 }
-
-
