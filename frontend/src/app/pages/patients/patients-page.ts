@@ -115,6 +115,22 @@ const FILTERS: { value: Filter; label: string }[] = [
                 }
               }
 
+              @if (visit.conflict; as conflict) {
+                <section class="conflict" role="alert">
+                  <strong>⚠ Este registro cambió en otro dispositivo</strong>
+                  <p class="versions">
+                    <span><b>En el servidor:</b> {{ conflict.serverRecord.symptoms }}</span>
+                    <span><b>En este celular:</b> {{ visit.encounter.symptoms }}</span>
+                  </p>
+                  <div class="row">
+                    <button type="button" (click)="keepMine(visit)">Conservar la mía</button>
+                    <button type="button" class="secondary" (click)="useServer(visit)">
+                      Usar la del servidor
+                    </button>
+                  </div>
+                </section>
+              }
+
               <div class="row">
                 <span class="sync" [attr.data-status]="visit.encounter.syncStatus">
                   {{ syncLabel(visit.encounter.syncStatus) }}
@@ -281,6 +297,7 @@ const FILTERS: { value: Filter; label: string }[] = [
 })
 export class PatientsPage {
   private readonly repository = inject(EncounterRepository);
+  private readonly runner = inject(TriageRunner);
   private readonly currentYear = new Date().getFullYear();
 
   readonly visits = toSignal(this.repository.watchVisits(), { initialValue: null });
@@ -313,7 +330,17 @@ export class PatientsPage {
       history.replaceState({ ...history.state, saved: false }, '');
     }
     // Classify any visit left without a result
-    void inject(TriageRunner).classifyMissing();
+    void this.runner.classifyMissing();
+  }
+
+  /** Keep this phone's version: it is resent as the next edit on top of the server's. */
+  async keepMine(visit: VisitSummary): Promise<void> {
+    this.runner.run(await this.repository.resolveKeepMine(visit.encounter.id));
+  }
+
+  /** Adopt the server's version; the visit is classified again for its new content. */
+  async useServer(visit: VisitSummary): Promise<void> {
+    this.runner.run(await this.repository.resolveUseServer(visit.encounter.id));
   }
 
   effective(visit: VisitSummary): Priority | undefined {
