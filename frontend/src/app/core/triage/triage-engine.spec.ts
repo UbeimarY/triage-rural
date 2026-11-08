@@ -1,4 +1,5 @@
 import { NO_ALARMS } from './alarm-signs';
+import { TRIAGE_TEXT_MODEL } from './model';
 import { classify } from './triage-engine';
 
 describe('classify', () => {
@@ -27,3 +28,26 @@ describe('classify', () => {
   });
 });
 
+describe('classify with the text model', () => {
+  it('lets alarm rules override the model', () => {
+    const result = classify(
+      { symptoms: 'Viene a control de rutina', alarms: { ...NO_ALARMS, seizures: true } },
+      TRIAGE_TEXT_MODEL,
+    );
+
+    expect(result.priority).toBe('high');
+    expect(result.source).toBe('rules');
+  });
+
+  it('uses the model when there are no alarm signs, with its version and explanation', () => {
+    const result = classify(
+      { symptoms: 'Fiebre muy alta con rigidez en el cuello', alarms: NO_ALARMS },
+      TRIAGE_TEXT_MODEL,
+    );
+
+    expect(result.source).toBe('model');
+    expect(result.priority).toBe('high');
+    expect(result.modelVersion).toBe('triage-text-v1');
+    expect(result.reasonCodes).toEqual(['MODEL_PREDICTION']);
+  });
+});

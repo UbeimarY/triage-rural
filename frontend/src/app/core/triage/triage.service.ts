@@ -28,8 +28,11 @@ export class TriageService {
 
     const worker = this.getWorker();
     if (!worker) {
-      // Fallback: same engine on the main thread (unit tests, very old browsers, or the demo)
-      return Promise.resolve(runClassification(request));
+      // Fallback: same engine and model on the main thread (tests, old browsers, the demo).
+      // The model loads lazily so it never weighs on the initial bundle.
+      return import('./model').then(({ TRIAGE_TEXT_MODEL }) =>
+        runClassification(request, TRIAGE_TEXT_MODEL),
+      );
     }
 
     return new Promise<TriageResult>((resolve, reject) => {
