@@ -23,6 +23,44 @@ export interface TextPrediction {
   topTerms: string[];
 }
 
+/**
+ * Function words carry weight in the model but explain nothing to a person.
+ * They are hidden from the explanation only; predictions are untouched.
+ */
+const NOT_EXPLANATORY = new Set([
+  'de',
+  'del',
+  'la',
+  'el',
+  'los',
+  'las',
+  'en',
+  'con',
+  'por',
+  'para',
+  'que',
+  'se',
+  'le',
+  'lo',
+  'un',
+  'una',
+  'al',
+  'su',
+  'es',
+  'esta',
+  'hace',
+  'desde',
+  'muy',
+  'mas',
+  'pero',
+  'no',
+  'ya',
+]);
+
+function isExplanatory(term: string): boolean {
+  return term.split(' ').some((word) => !NOT_EXPLANATORY.has(word));
+}
+
 export function compileModel(json: TextModelJson): TextModel {
   return { ...json, index: new Map(json.vocabulary.map((term, i) => [term, i])) };
 }
@@ -72,7 +110,7 @@ export function predict(model: TextModel, text: string): TextPrediction {
   const c = model.classes.indexOf(priority);
   const topTerms = [...weights]
     .map(([i, w]) => ({ term: model.vocabulary[i], contribution: model.coef[c][i] * (w / norm) }))
-    .filter((item) => item.contribution > 0)
+    .filter((item) => item.contribution > 0 && isExplanatory(item.term))
     .sort((a, b) => b.contribution - a.contribution)
     .slice(0, 3)
     .map((item) => item.term);
