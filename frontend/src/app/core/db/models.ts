@@ -51,6 +51,19 @@ export interface OutboxOperation {
   baseVersion?: number;
   createdAt: string;
   attempts: number;
+  /** Set when the server refused the operation for good: it is not sent again. */
+  rejectedCode?: string;
+}
+
+/**
+ * The server had a newer version of a visit than the one this edit was based on.
+ * Both copies are kept until the promoter decides: health data is never overwritten silently.
+ */
+export interface SyncConflict {
+  encounterId: string;
+  serverVersion: number;
+  serverRecord: Pick<Encounter, 'symptoms' | 'alarms' | 'updatedAt' | 'version'>;
+  detectedAt: string;
 }
 
 export type Priority = 'high' | 'medium' | 'low';

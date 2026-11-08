@@ -11,6 +11,7 @@ import {
   Patient,
   Priority,
   Sex,
+  SyncConflict,
   TriageAssessment,
   TriageResult,
 } from './models';
@@ -36,6 +37,8 @@ export interface VisitSummary {
   encounter: Encounter;
   /** Only present when it matches the current version of the visit. */
   assessment?: TriageAssessment;
+  /** Present when the server had a newer version: the promoter must decide. */
+  conflict?: SyncConflict;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -75,14 +78,18 @@ export class EncounterRepository {
     };
 
     // Atomic write: the records and their pending operations are saved together, or not at all.
-    await this.db.transaction('rw', [this.db.patients, this.db.encounters, this.db.outbox], async () => {
-      await this.db.patients.add(patient);
-      await this.db.encounters.add(encounter);
-      await this.db.outbox.bulkAdd([
-        createOperation('patient', 'create', patient.id, toPayload(patient)),
-        createOperation('encounter', 'create', encounter.id, toPayload(encounter)),
-      ]);
-    });
+    await this.db.transaction(
+      'rw',
+      [this.db.patients, this.db.encounters, this.db.outbox],
+      async () => {
+        await this.db.patients.add(patient);
+        await this.db.encounters.add(encounter);
+        await this.db.outbox.bulkAdd([
+          createOperation('patient', 'create', patient.id, toPayload(patient)),
+          createOperation('encounter', 'create', encounter.id, toPayload(encounter)),
+        ]);
+      },
+    );
 
     void requestPersistentStorage();
     return { patient, encounter };
@@ -117,31 +124,40 @@ export class EncounterRepository {
    * Stores the triage result for a visit. Returns false and discards the result
    * if the visit was edited while it was being classified (stale result).
    */
-  async saveAssessment(encounterId: string, encounterVersion: number, result: TriageResult): Promise<boolean> {
-    return this.db.transaction('rw', [this.db.encounters, this.db.assessments, this.db.outbox], async () => {
-      const encounter = await this.db.encounters.get(encounterId);
-      if (!encounter || encounter.version !== encounterVersion) {
-        return false;
-      }
+  async saveAssessment(
+    encounterId: string,
+    encounterVersion: number,
+    result: TriageResult,
+  ): Promise<boolean> {
+    return this.db.transaction(
+      'rw',
+      [this.db.encounters, this.db.assessments, this.db.outbox],
+      async () => {
+        const encounter = await this.db.encounters.get(encounterId);
+        if (!encounter || encounter.version !== encounterVersion) {
+          return false;
+        }
 
+        const existing = await this.db.assessments.get(encounterId);
+        const assessment: TriageAssessment = {
+          ...result,
+          encounterId,
+          encounterVersion,
+          createdAt: new Date().toISOString(),
+        };
 
-      const existing = await this.db.assessments.get(encounterId);
-      const assessment: TriageAssessment = {
-        ...result,
-        encounterId,
-        encounterVersion,
-        createdAt: new Date().toISOString(),
-      };
-
-      await this.db.assessments.put(assessment);
-      await this.db.outbox.add(
-        createOperation('assessment', existing ? 'update' : 'create', encounterId, { ...assessment }),
-      );
-      return true;
-    });
+        await this.db.assessments.put(assessment);
+        await this.db.outbox.add(
+          createOperation('assessment', existing ? 'update' : 'create', encounterId, {
+            ...assessment,
+          }),
+        );
+        return true;
+      },
+    );
   }
 
-    /**
+  /**
    * Records the promoter's decision about the suggested priority.
    * Lowering the suggestion requires a written reason.
    */
@@ -170,9 +186,80 @@ export class EncounterRepository {
       };
 
       await this.db.assessments.put(reviewed);
-      await this.db.outbox.add(createOperation('assessment', 'update', encounterId, { ...reviewed }));
+      await this.db.outbox.add(
+        createOperation('assessment', 'update', encounterId, { ...reviewed }),
+      );
       return reviewed;
     });
+  }
+
+  /**
+   * Conflict resolution: keep the promoter's version. It is resent on top of the
+   * server's version, so the server accepts it as the next edit.
+   */
+  async resolveKeepMine(encounterId: string): Promise<Encounter> {
+    return this.db.transaction(
+      'rw',
+      [this.db.encounters, this.db.conflicts, this.db.outbox],
+      async () => {
+        const [encounter, conflict] = await Promise.all([
+          this.db.encounters.get(encounterId),
+          this.db.conflicts.get(encounterId),
+        ]);
+        if (!encounter || !conflict) throw new Error('CONFLICT_NOT_FOUND');
+
+        const updated: Encounter = {
+          ...encounter,
+          version: conflict.serverVersion + 1,
+          updatedAt: new Date().toISOString(),
+          syncStatus: 'pending',
+        };
+        await this.db.encounters.put(updated);
+        await this.db.outbox.add(
+          createOperation(
+            'encounter',
+            'update',
+            encounterId,
+            toPayload(updated),
+            conflict.serverVersion,
+          ),
+        );
+        await this.db.conflicts.delete(encounterId);
+        return updated;
+      },
+    );
+  }
+
+  /** Conflict resolution: adopt the server's version and drop the local edit. */
+  async resolveUseServer(encounterId: string): Promise<Encounter> {
+    return this.db.transaction(
+      'rw',
+      [this.db.encounters, this.db.conflicts, this.db.outbox],
+      async () => {
+        const [encounter, conflict] = await Promise.all([
+          this.db.encounters.get(encounterId),
+          this.db.conflicts.get(encounterId),
+        ]);
+        if (!encounter || !conflict) throw new Error('CONFLICT_NOT_FOUND');
+
+        const updated: Encounter = {
+          ...encounter,
+          symptoms: conflict.serverRecord.symptoms,
+          alarms: { ...conflict.serverRecord.alarms },
+          updatedAt: conflict.serverRecord.updatedAt,
+          version: conflict.serverVersion,
+          syncStatus: 'synced',
+        };
+        await this.db.encounters.put(updated);
+        await this.db.outbox
+          .where('entityId')
+          .equals(encounterId)
+          .filter((operation) => operation.entity === 'encounter' && operation.type === 'update')
+          .delete();
+        await this.db.conflicts.delete(encounterId);
+        return updated;
+      },
+    );
   }
 
   /** Visits without a result for their current version (e.g. the app closed mid-classification). */
@@ -194,8 +281,11 @@ export class EncounterRepository {
     return from(
       liveQuery(async () => {
         const encounters = await this.db.encounters.orderBy('updatedAt').reverse().toArray();
-        const patients = await this.db.patients.bulkGet([...new Set(encounters.map((e) => e.patientId))]);
+        const patients = await this.db.patients.bulkGet([
+          ...new Set(encounters.map((e) => e.patientId)),
+        ]);
         const assessments = await this.db.assessments.bulkGet(encounters.map((e) => e.id));
+        const conflicts = await this.db.conflicts.bulkGet(encounters.map((e) => e.id));
 
         const patientsById = new Map<string, Patient>();
         for (const patient of patients) {
@@ -211,6 +301,7 @@ export class EncounterRepository {
             patient,
             encounter,
             assessment: assessment?.encounterVersion === encounter.version ? assessment : undefined,
+            conflict: conflicts[i],
           });
         });
         return visits;

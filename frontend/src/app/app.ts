@@ -1,7 +1,10 @@
-import { Component, inject } from '@angular/core';
+import { DatePipe } from '@angular/common';
+import { Component, computed, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppUpdateService } from './core/app-update.service';
+import { SessionStore } from './core/auth/session.store';
 import { ConnectivityService } from './core/connectivity.service';
+import { SyncService } from './core/sync/sync.service';
 
 @Component({
   selector: 'app-root',
@@ -25,6 +28,17 @@ import { ConnectivityService } from './core/connectivity.service';
         Estás sin conexión. La aplicación sigue funcionando.
       </p>
     }
+
+    <div class="sync-bar" role="status" [attr.data-state]="sync.state()">
+      <span>{{ syncText() }}</span>
+      @if (sync.state() === 'needs-login') {
+        <a routerLink="/login">Ingresar</a>
+      } @else if (session.isSignedIn() && connectivity.online()) {
+        <button type="button" class="link" (click)="sync.syncNow()" [disabled]="sync.isBusy()">
+          Sincronizar ahora
+        </button>
+      }
+    </div>
 
     @if (updates.updateAvailable()) {
       <div class="update-banner" role="status">
@@ -51,6 +65,23 @@ import { ConnectivityService } from './core/connectivity.service';
         <span class="nav-icon" aria-hidden="true">＋</span>
         Registrar
       </a>
+      @if (session.isCoordinator()) {
+        <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-icon" aria-hidden="true">▤</span>
+          Panel
+        </a>
+      }
+      @if (session.user(); as user) {
+        <button type="button" class="nav-button" (click)="session.end()">
+          <span class="nav-icon" aria-hidden="true">⎋</span>
+          Salir ({{ user.fullName.split(' ')[0] }})
+        </button>
+      } @else {
+        <a routerLink="/login" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <span class="nav-icon" aria-hidden="true">⇄</span>
+          Ingresar
+        </a>
+      }
     </nav>
   `,
   styles: `
@@ -123,6 +154,33 @@ import { ConnectivityService } from './core/connectivity.service';
       color: #173d7a;
     }
 
+    .sync-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      margin: 0;
+      padding: 0.5rem 1rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      background: var(--color-surface);
+      border-bottom: 1px solid var(--color-border);
+      color: var(--color-muted);
+    }
+    .sync-bar[data-state='needs-login'],
+    .sync-bar[data-state='other-account'],
+    .sync-bar[data-state='server-unreachable'] {
+      background: var(--priority-medium-bg);
+      color: var(--priority-medium);
+    }
+    .link {
+      min-height: 40px;
+      padding: 0.25rem 0.75rem;
+      background: transparent;
+      color: var(--color-primary-dark);
+      border: 1px solid var(--color-primary);
+    }
+
     .safety-notice {
       margin: 0;
       padding: 0.6rem 1rem;
@@ -163,6 +221,16 @@ import { ConnectivityService } from './core/connectivity.service';
       font-weight: 600;
       font-size: 0.9rem;
     }
+    .bottom-nav .nav-button {
+      flex: 1;
+      flex-direction: column;
+      min-height: 64px;
+      border-radius: 0;
+      background: transparent;
+      color: var(--color-muted);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
     .bottom-nav a.active {
       color: var(--color-primary-dark);
       box-shadow: inset 0 3px 0 var(--color-primary);
@@ -176,4 +244,32 @@ import { ConnectivityService } from './core/connectivity.service';
 export class App {
   readonly connectivity = inject(ConnectivityService);
   readonly updates = inject(AppUpdateService);
+  readonly session = inject(SessionStore);
+  // Injecting the sync service starts its triggers (network back, app visible, changes).
+  readonly sync = inject(SyncService);
+  private readonly dates = new DatePipe('es-CO');
+
+  readonly syncText = computed(() => {
+    const pending = this.sync.pending();
+    const last = this.sync.lastSyncAt();
+    switch (this.sync.state()) {
+      case 'syncing':
+        return 'Sincronizando…';
+      case 'offline':
+        return pending > 0
+          ? `${pending} cambios se enviarán al volver la señal`
+          : 'Sin señal: todo queda guardado aquí';
+      case 'needs-login':
+        return pending > 0
+          ? `${pending} cambios esperan: ingresa para sincronizar`
+          : 'Ingresa para sincronizar';
+      case 'other-account':
+        return 'Hay registros de otra cuenta en este equipo: no se envían con la tuya';
+      case 'server-unreachable':
+        return `No se pudo llegar al servidor · ${pending} pendientes, se reintentará`;
+      default:
+        if (pending > 0) return `${pending} cambios por sincronizar`;
+        return last ? `✓ Todo sincronizado · ${this.dates.transform(last, 'h:mm a')}` : '✓ Al día';
+    }
+  });
 }
