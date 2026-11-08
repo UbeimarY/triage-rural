@@ -27,7 +27,10 @@ export class TriageRunner {
     this.running.add(key);
 
     try {
-      const result = await this.triage.classify({ symptoms: encounter.symptoms, alarms: encounter.alarms });
+      const result = await this.triage.classify({
+        symptoms: encounter.symptoms,
+        alarms: encounter.alarms,
+      });
       await this.repository.saveAssessment(encounter.id, encounter.version, result);
     } catch (error) {
       // The visit stays "Clasificando..." and will be retried next time the list opens

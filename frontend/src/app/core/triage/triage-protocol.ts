@@ -13,5 +13,3 @@ export interface TriageRequest {
 export type TriageResponse =
   | { requestId: string; ok: true; result: TriageResult }
   | { requestId: string; ok: false; error: string };
-
-  

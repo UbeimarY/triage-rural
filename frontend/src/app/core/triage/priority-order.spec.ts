@@ -2,9 +2,7 @@ import { Priority, TriageAssessment } from '../db/models';
 import { effectivePriority, isLowering, sortByAttention } from './priority-order';
 
 function visit(id: string, createdAt: string, priority?: Priority, finalPriority?: Priority) {
-  const assessment = priority
-    ? ({ priority, finalPriority } as TriageAssessment)
-    : undefined;
+  const assessment = priority ? ({ priority, finalPriority } as TriageAssessment) : undefined;
   return { id, encounter: { createdAt }, assessment };
 }
 
@@ -36,7 +34,9 @@ describe('priority order', () => {
     ]);
 
     expect(sorted.map((v) => v.id)).toEqual(['medium', 'suggested-high-lowered']);
-    expect(effectivePriority({ priority: 'medium', finalPriority: 'high' } as TriageAssessment)).toBe('high');
+    expect(
+      effectivePriority({ priority: 'medium', finalPriority: 'high' } as TriageAssessment),
+    ).toBe('high');
   });
 
   it('should detect when a priority is being lowered', () => {
@@ -45,4 +45,3 @@ describe('priority order', () => {
     expect(isLowering('low', 'low')).toBe(false);
   });
 });
-
