@@ -1,4 +1,3 @@
-import 'fake-indexeddb/auto';
 import { TestBed } from '@angular/core/testing';
 import { NO_ALARMS } from '../triage/alarm-signs';
 import { EncounterRepository, NewVisitInput } from './encounter.repository';
@@ -81,7 +80,7 @@ describe('EncounterRepository', () => {
     expect(await db.patients.count()).toBe(0);
   });
 
-    it('should store an assessment and queue it for sync', async () => {
+  it('should store an assessment and queue it for sync', async () => {
     const { encounter } = await repository.registerVisit(visitInput);
 
     const saved = await repository.saveAssessment(encounter.id, encounter.version, sampleResult);
@@ -105,7 +104,7 @@ describe('EncounterRepository', () => {
     expect(await db.assessments.get(encounter.id)).toBeUndefined();
   });
 
-    it('should record the promoter review and queue it for sync', async () => {
+  it('should record the promoter review and queue it for sync', async () => {
     const { encounter } = await repository.registerVisit(visitInput);
     await repository.saveAssessment(encounter.id, 1, sampleResult);
 
@@ -115,7 +114,9 @@ describe('EncounterRepository', () => {
     expect(stored?.priority).toBe('medium');
     expect(stored?.finalPriority).toBe('high');
     expect(stored?.reviewedAt).toBeDefined();
-    const updates = (await db.outbox.toArray()).filter((o) => o.entity === 'assessment' && o.type === 'update');
+    const updates = (await db.outbox.toArray()).filter(
+      (o) => o.entity === 'assessment' && o.type === 'update',
+    );
     expect(updates.length).toBe(1);
   });
 
@@ -132,7 +133,12 @@ describe('EncounterRepository', () => {
       'REVIEW_NOTE_REQUIRED',
     );
 
-    await repository.reviewAssessment(encounter.id, 1, 'medium', 'Dolor por un golpe leve, ya evaluado');
+    await repository.reviewAssessment(
+      encounter.id,
+      1,
+      'medium',
+      'Dolor por un golpe leve, ya evaluado',
+    );
     expect((await db.assessments.get(encounter.id))?.finalPriority).toBe('medium');
   });
 });
