@@ -1,0 +1,33 @@
+# The Angular app lives in frontend/ (monorepo layout).
+[build]
+  base = "frontend"
+  command = "npm ci --ignore-scripts && npm run build"
+  publish = "dist/frontend/browser"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://triage-api-ubeimar.fly.dev; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
+    Referrer-Policy = "no-referrer"
+    X-Content-Type-Options = "nosniff"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# The service worker must always be revalidated, or phones could keep an old app forever.
+[[headers]]
+  for = "/ngsw-worker.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/ngsw.json"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+# Single-page app: every route is served by index.html.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
