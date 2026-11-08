@@ -37,6 +37,16 @@ describe('text model', () => {
     expect(prediction.topTerms.length).toBeGreaterThan(0);
   });
 
+  it('explains with meaningful words, never with function words alone', () => {
+    const { topTerms } = predict(
+      TRIAGE_TEXT_MODEL,
+      'Tos con flema verde y fiebre desde hace una semana',
+    );
+
+    expect(topTerms).not.toContain('con');
+    expect(topTerms.length).toBeGreaterThan(0);
+  });
+
   it('keeps a routine visit low', () => {
     expect(
       predict(TRIAGE_TEXT_MODEL, 'Viene a control de la presión, se siente bien').priority,
