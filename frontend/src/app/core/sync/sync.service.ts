@@ -1,4 +1,4 @@
-import { DestroyRef, Injectable, computed, effect, inject, signal } from '@angular/core';
+import { DestroyRef, Injectable, computed, effect, inject, signal, untracked } from '@angular/core';
 import { liveQuery } from 'dexie';
 
 import { ApiClient, ApiError } from '../api/api-client';
@@ -67,9 +67,17 @@ export class SyncService {
     document.addEventListener('visibilitychange', onVisible);
     const timer = setInterval(() => this.schedule(0), PERIODIC_MS);
 
-    // Back online or freshly signed in: try right away.
+    // Network lost: say so at once. Back online or freshly signed in: try right away.
     effect(() => {
-      if (this.connectivity.online() && this.session.isSignedIn()) this.schedule(0);
+      const online = this.connectivity.online();
+      const signedIn = this.session.isSignedIn();
+      if (!online) {
+        if (untracked(this.state) !== 'syncing') this.state.set('offline');
+      } else if (signedIn) {
+        this.schedule(0);
+      } else {
+        this.state.set('needs-login');
+      }
     });
 
     destroyRef.onDestroy(() => {
