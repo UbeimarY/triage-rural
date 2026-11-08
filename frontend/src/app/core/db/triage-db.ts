@@ -1,12 +1,13 @@
 import { InjectionToken } from '@angular/core';
 import Dexie, { type EntityTable } from 'dexie';
-import { Encounter, OutboxOperation, Patient, TriageAssessment } from './models';
+import { Encounter, OutboxOperation, Patient, SyncConflict, TriageAssessment } from './models';
 
 export class TriageDatabase extends Dexie {
   patients!: EntityTable<Patient, 'id'>;
   encounters!: EntityTable<Encounter, 'id'>;
   outbox!: EntityTable<OutboxOperation, 'id'>;
   assessments!: EntityTable<TriageAssessment, 'encounterId'>;
+  conflicts!: EntityTable<SyncConflict, 'encounterId'>;
 
   constructor(name = 'triage-rural') {
     super(name);
@@ -19,11 +20,15 @@ export class TriageDatabase extends Dexie {
       outbox: 'id, createdAt, entityId',
     });
 
-        // Version 2: adds triage assessments (one per visit). Existing data is kept.
+    // Version 2: adds triage assessments (one per visit). Existing data is kept.
     this.version(2).stores({
       assessments: 'encounterId, priority',
     });
-    
+
+    // Version 3: sync conflicts waiting for the promoter's decision. Existing data is kept.
+    this.version(3).stores({
+      conflicts: 'encounterId',
+    });
   }
 }
 
@@ -32,4 +37,3 @@ export const TRIAGE_DB = new InjectionToken<TriageDatabase>('TRIAGE_DB', {
   providedIn: 'root',
   factory: () => new TriageDatabase(),
 });
-
