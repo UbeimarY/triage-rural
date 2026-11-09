@@ -4,7 +4,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { EncounterRepository, VisitSummary } from '../../core/db/encounter.repository';
 import { Priority, SyncStatus } from '../../core/db/models';
-import { ALARM_SIGNS } from '../../core/triage/alarm-signs';
+import { explainResult } from '../../core/triage/explain';
 import { effectivePriority, sortByAttention } from '../../core/triage/priority-order';
 import { TriageRunner } from '../../core/triage/triage-runner.service';
 import { PRIORITY_DISPLAY, PriorityBadge } from '../../shared/priority-badge';
@@ -18,11 +18,11 @@ const SYNC_LABELS: Record<SyncStatus, string> = {
   error: '⚠ Error al sincronizar',
 };
 
-const FILTERS: { value: Filter; label: string }[] = [
-  { value: 'all', label: 'Todos' },
-  { value: 'high', label: '▲ Alta' },
-  { value: 'medium', label: '■ Intermedia' },
-  { value: 'low', label: '▼ Baja' },
+const FILTERS: { value: Filter; label: string; icon: string }[] = [
+  { value: 'all', label: 'Todos', icon: '' },
+  { value: 'high', label: 'Alta', icon: '▲' },
+  { value: 'medium', label: 'Intermedia', icon: '■' },
+  { value: 'low', label: 'Baja', icon: '▼' },
 ];
 
 @Component({
@@ -47,34 +47,34 @@ const FILTERS: { value: Filter; label: string }[] = [
           <a class="button" routerLink="/encounters/new">Registrar el primero</a>
         </section>
       } @else {
-        <p class="summary">
-          <strong>{{ counts().high }}</strong> alta ·
-          <strong>{{ counts().medium }}</strong> intermedia ·
-          <strong>{{ counts().low }}</strong> baja
-          @if (counts().pending > 0) {
-            · <strong>{{ counts().pending }}</strong> clasificando
-          }
-        </p>
-
-        <div class="filters" role="group" aria-label="Filtrar por prioridad">
+        <div class="tiles" role="group" aria-label="Filtrar por prioridad">
           @for (option of filters; track option.value) {
             <button
               type="button"
-              class="chip"
-              [class.active]="filter() === option.value"
+              class="tile"
+              [attr.data-priority]="option.value"
               [attr.aria-pressed]="filter() === option.value"
               (click)="filter.set(option.value)"
             >
-              {{ option.label }}
+              <span class="tile__count">{{ countFor(option.value) }}</span>
+              <span class="tile__label">
+                @if (option.icon) {
+                  <span aria-hidden="true">{{ option.icon }}</span>
+                }
+                {{ option.label }}
+              </span>
             </button>
           }
         </div>
+        @if (counts().pending > 0) {
+          <p class="order-note">{{ counts().pending }} en clasificación…</p>
+        }
 
         <p class="order-note">Ordenados por prioridad y tiempo de espera.</p>
 
         <ul class="visit-list">
           @for (visit of shown(); track visit.encounter.id) {
-            <li class="card visit">
+            <li class="card visit" [attr.data-priority]="effective(visit) ?? 'pending'">
               <div class="row">
                 <strong>Paciente {{ visit.patient.code }}</strong>
                 <app-priority-badge [priority]="effective(visit)" />
@@ -152,6 +152,11 @@ const FILTERS: { value: Filter; label: string }[] = [
     }
   `,
   styles: `
+    :host {
+      display: block;
+      max-width: 720px;
+      margin: 0 auto;
+    }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -182,28 +187,61 @@ const FILTERS: { value: Filter; label: string }[] = [
       text-align: center;
     }
 
-    .summary {
-      margin: 0 0 0.75rem;
-    }
-    .filters {
-      display: flex;
+    /* Summary tiles double as filters: the count is what the promoter needs first. */
+    .tiles {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 0.5rem;
-      flex-wrap: wrap;
     }
-    .chip {
+    .tile {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 0.1rem;
+      padding: 0.7rem 0.8rem;
       background: var(--color-surface);
       color: var(--color-text);
-      border: 1px solid var(--color-border);
-      border-radius: 999px;
-      padding: 0.5rem 1rem;
+      border: 2px solid var(--color-border);
+      text-align: left;
     }
-    .chip:hover:not(:disabled) {
+    .tile:hover:not(:disabled) {
       background: var(--color-bg);
     }
-    .chip.active {
-      background: var(--color-primary);
-      color: #fff;
+    .tile__count {
+      font-size: 1.6rem;
+      font-weight: 700;
+      line-height: 1;
+    }
+    .tile__label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .tile[data-priority='high'] {
+      background: var(--priority-high-bg);
+      color: var(--priority-high);
+      border-color: transparent;
+    }
+    .tile[data-priority='medium'] {
+      background: var(--priority-medium-bg);
+      color: var(--priority-medium);
+      border-color: transparent;
+    }
+    .tile[data-priority='low'] {
+      background: var(--priority-low-bg);
+      color: var(--priority-low);
+      border-color: transparent;
+    }
+    .tile[aria-pressed='true'] {
+      border-color: currentColor;
+      box-shadow: var(--shadow);
+    }
+    .tile[data-priority='all'][aria-pressed='true'] {
       border-color: var(--color-primary);
+    }
+    @media (max-width: 380px) {
+      .tile__count {
+        font-size: 1.3rem;
+      }
     }
     .order-note {
       margin: 0.75rem 0;
@@ -223,6 +261,16 @@ const FILTERS: { value: Filter; label: string }[] = [
       display: flex;
       flex-direction: column;
       gap: 0.4rem;
+      border-left: 6px solid var(--color-border);
+    }
+    .visit[data-priority='high'] {
+      border-left-color: var(--priority-high);
+    }
+    .visit[data-priority='medium'] {
+      border-left-color: #d9a54a;
+    }
+    .visit[data-priority='low'] {
+      border-left-color: #4f9d6c;
     }
     .row {
       display: flex;
@@ -316,6 +364,11 @@ export class PatientsPage {
       : ordered.filter((v) => effectivePriority(v.assessment) === filter);
   });
 
+  countFor(filter: Filter): number {
+    const counts = this.counts();
+    return filter === 'all' ? (this.visits() ?? []).length : counts[filter];
+  }
+
   readonly counts = computed(() => {
     const counts = { high: 0, medium: 0, low: 0, pending: 0 };
     for (const visit of this.visits() ?? []) {
@@ -360,19 +413,6 @@ export class PatientsPage {
   }
 
   reasonText(visit: VisitSummary): string {
-    const assessment = visit.assessment;
-    if (!assessment) return '';
-    if (assessment.triggeredAlarms.length > 0) {
-      const names = assessment.triggeredAlarms.map(
-        (key) => ALARM_SIGNS.find((sign) => sign.key === key)?.shortLabel ?? key,
-      );
-      return `⚠ Regla de alarma: ${names.join(', ')}`;
-    }
-    if (assessment.source === 'model' && assessment.probabilities) {
-      const confidence = Math.round(assessment.probabilities[assessment.priority] * 100);
-      const terms = assessment.topTerms?.length ? ` por «${assessment.topTerms.join('», «')}»` : '';
-      return `Sugerencia de la IA${terms} · confianza ${confidence} %`;
-    }
-    return 'Sin signos de alarma · prioridad provisional, revísala según tu criterio';
+    return visit.assessment ? explainResult(visit.assessment) : '';
   }
 }

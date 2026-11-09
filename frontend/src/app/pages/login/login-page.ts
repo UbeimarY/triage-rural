@@ -52,6 +52,11 @@ import { ConnectivityService } from '../../core/connectivity.service';
     </p>
   `,
   styles: `
+    :host {
+      display: block;
+      max-width: 720px;
+      margin: 0 auto;
+    }
     .lede,
     .hint {
       color: var(--color-muted);
