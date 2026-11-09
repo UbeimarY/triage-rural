@@ -1,16 +1,21 @@
 import { Component, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
+import { debounceTime, merge } from 'rxjs';
 import { EncounterRepository } from '../../core/db/encounter.repository';
-import { Sex } from '../../core/db/models';
+import { Sex, TriageResult } from '../../core/db/models';
 import { ALARM_SIGNS } from '../../core/triage/alarm-signs';
+import { explainResult } from '../../core/triage/explain';
 import { TriageRunner } from '../../core/triage/triage-runner.service';
+import { TriageService } from '../../core/triage/triage.service';
+import { PriorityBadge } from '../../shared/priority-badge';
 
 type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven';
 
 @Component({
   selector: 'app-encounter-form-page',
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, PriorityBadge],
   template: `
     <h1>{{ isEdit ? 'Editar registro' : 'Nuevo registro' }}</h1>
     @if (patientCode(); as code) {
@@ -32,7 +37,9 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
           [attr.aria-invalid]="invalid('birthYear')"
         />
         @if (invalid('birthYear')) {
-          <p class="field-error">Ingresa un año válido. Solo se registran personas adultas (18 años o más).</p>
+          <p class="field-error">
+            Ingresa un año válido. Solo se registran personas adultas (18 años o más).
+          </p>
         }
 
         <label for="sex">Sexo</label>
@@ -47,7 +54,11 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
         }
 
         <label for="community">Comunidad o vereda</label>
-        <input id="community" formControlName="community" [attr.aria-invalid]="invalid('community')" />
+        <input
+          id="community"
+          formControlName="community"
+          [attr.aria-invalid]="invalid('community')"
+        />
         @if (invalid('community')) {
           <p class="field-error">Indica la comunidad o vereda (máximo 80 caracteres).</p>
         }
@@ -78,12 +89,36 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
         }
       </fieldset>
 
+      <section
+        class="preview"
+        aria-labelledby="preview-title"
+        [attr.data-priority]="preview()?.priority"
+      >
+        <h2 id="preview-title">Prioridad sugerida</h2>
+        <div aria-live="polite">
+          @if (preview(); as result) {
+            <app-priority-badge [priority]="result.priority" />
+            <p class="preview-reason">{{ explain(result) }}</p>
+          } @else {
+            <p class="hint">
+              Escribe los síntomas o marca un signo de alarma y aquí verás la sugerencia.
+            </p>
+          }
+        </div>
+        <p class="hint">
+          Se calcula en este teléfono, aun sin internet. Después de guardar puedes confirmarla o
+          cambiarla.
+        </p>
+      </section>
+
       <label class="check consent">
         <input type="checkbox" formControlName="consentGiven" />
         <span>El paciente fue informado y autoriza el registro de sus datos para su atención.</span>
       </label>
       @if (invalid('consentGiven')) {
-        <p class="field-error">Se requiere la autorización del paciente para guardar el registro.</p>
+        <p class="field-error">
+          Se requiere la autorización del paciente para guardar el registro.
+        </p>
       }
 
       @if (error()) {
@@ -99,38 +134,142 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
     </form>
   `,
   styles: `
-    .muted { margin-top: -0.5rem; color: var(--color-muted); font-weight: 600; }
-    .local-note { color: var(--color-muted); font-size: 0.95rem; }
+    :host {
+      display: block;
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .muted {
+      margin-top: -0.5rem;
+      color: var(--color-muted);
+      font-weight: 600;
+    }
+    .local-note {
+      color: var(--color-muted);
+      font-size: 0.95rem;
+    }
 
-    .form { display: flex; flex-direction: column; gap: 1.25rem; }
-    fieldset { display: flex; flex-direction: column; gap: 0.4rem; margin: 0; padding: 0; border: none; }
-    legend { margin-bottom: 0.5rem; font-size: 1.1rem; font-weight: 700; }
-    label { font-weight: 600; margin-top: 0.5rem; }
-    .hint { margin: 0; color: var(--color-muted); font-size: 0.9rem; }
+    .form {
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+    fieldset {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin: 0;
+      padding: 0;
+      border: none;
+    }
+    legend {
+      margin-bottom: 0.5rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+    }
+    label {
+      font-weight: 600;
+      margin-top: 0.5rem;
+    }
+    .hint {
+      margin: 0;
+      color: var(--color-muted);
+      font-size: 0.9rem;
+    }
 
     .check {
-      display: flex; align-items: flex-start; gap: 0.75rem;
-      min-height: var(--touch-target); padding: 0.6rem 0.75rem;
-      border: 1px solid var(--color-border); border-radius: var(--radius);
-      font-weight: 500; cursor: pointer;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      min-height: var(--touch-target);
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      font-weight: 500;
+      cursor: pointer;
     }
-    .check input { width: 1.5rem; height: 1.5rem; min-height: auto; margin: 0; flex-shrink: 0; }
-    .consent { background: #f0f6f4; }
+    .check input {
+      width: 1.5rem;
+      height: 1.5rem;
+      min-height: auto;
+      margin: 0;
+      flex-shrink: 0;
+    }
+    .consent {
+      background: #f0f6f4;
+    }
 
-    [aria-invalid='true'] { border-color: var(--color-danger); }
-    .field-error, .form-error { margin: 0; color: var(--color-danger); font-weight: 600; font-size: 0.95rem; }
+    [aria-invalid='true'] {
+      border-color: var(--color-danger);
+    }
+    .field-error,
+    .form-error {
+      margin: 0;
+      color: var(--color-danger);
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
 
-    .actions { display: flex; gap: 0.75rem; justify-content: flex-end; flex-wrap: wrap; }
-    .secondary { background: var(--color-surface); color: var(--color-primary-dark); border: 1px solid var(--color-primary); }
-    .secondary:hover { background: var(--color-bg); }
+    .preview {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      padding: 1rem;
+      border-radius: var(--radius);
+      border: 2px dashed var(--color-border);
+      background: var(--color-bg);
+    }
+    .preview h2 {
+      margin: 0;
+      font-size: 1rem;
+    }
+    .preview-reason {
+      margin: 0.4rem 0 0;
+      font-weight: 600;
+    }
+    .preview[data-priority='high'] {
+      border-style: solid;
+      border-color: var(--priority-high);
+      background: var(--priority-high-bg);
+    }
+    .preview[data-priority='medium'] {
+      border-style: solid;
+      border-color: #d9a54a;
+      background: var(--priority-medium-bg);
+    }
+    .preview[data-priority='low'] {
+      border-style: solid;
+      border-color: #6fb589;
+      background: var(--priority-low-bg);
+    }
+
+    .actions {
+      display: flex;
+      gap: 0.75rem;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .secondary {
+      background: var(--color-surface);
+      color: var(--color-primary-dark);
+      border: 1px solid var(--color-primary);
+    }
+    .secondary:hover {
+      background: var(--color-bg);
+    }
   `,
 })
 export class EncounterFormPage {
   private readonly fb = inject(FormBuilder);
   private readonly repository = inject(EncounterRepository);
   private readonly router = inject(Router);
-    private readonly triageRunner = inject(TriageRunner);
+  private readonly triageRunner = inject(TriageRunner);
+  private readonly triage = inject(TriageService);
   private readonly encounterId = inject(ActivatedRoute).snapshot.paramMap.get('id');
+  /** Live suggestion while typing; the saved result is computed again after saving. */
+  readonly preview = signal<TriageResult | null>(null);
+  readonly explain = explainResult;
+  private previewRun = 0;
 
   readonly isEdit = this.encounterId !== null;
   readonly alarmSigns = ALARM_SIGNS;
@@ -163,6 +302,11 @@ export class EncounterFormPage {
   });
 
   constructor() {
+    // Re-evaluate shortly after the promoter stops typing or ticks an alarm sign.
+    merge(this.form.controls.symptoms.valueChanges, this.form.controls.alarms.valueChanges)
+      .pipe(debounceTime(300), takeUntilDestroyed())
+      .subscribe(() => void this.updatePreview());
+
     if (this.encounterId) {
       void this.loadForEdit(this.encounterId);
     }
@@ -184,7 +328,7 @@ export class EncounterFormPage {
     this.error.set(null);
     const value = this.form.getRawValue();
 
-        try {
+    try {
       const encounter = this.encounterId
         ? await this.repository.updateEncounter(this.encounterId, {
             symptoms: value.symptoms,
@@ -205,8 +349,27 @@ export class EncounterFormPage {
       this.triageRunner.run(encounter);
       await this.router.navigate(['/patients'], { state: { saved: true } });
     } catch {
-      this.error.set('No se pudo guardar en el dispositivo. Verifica el espacio disponible e inténtalo de nuevo.');
+      this.error.set(
+        'No se pudo guardar en el dispositivo. Verifica el espacio disponible e inténtalo de nuevo.',
+      );
       this.saving.set(false);
+    }
+  }
+
+  private async updatePreview(): Promise<void> {
+    const { symptoms, alarms } = this.form.getRawValue();
+    const anyAlarm = Object.values(alarms).some(Boolean);
+    if (symptoms.trim().length < 10 && !anyAlarm) {
+      this.preview.set(null);
+      return;
+    }
+    // Only the newest request may update the preview, even if an older one answers later.
+    const run = ++this.previewRun;
+    try {
+      const result = await this.triage.classify({ symptoms, alarms });
+      if (run === this.previewRun) this.preview.set(result);
+    } catch {
+      if (run === this.previewRun) this.preview.set(null);
     }
   }
 
@@ -225,6 +388,7 @@ export class EncounterFormPage {
       alarms: visit.encounter.alarms,
       consentGiven: visit.encounter.consentGiven,
     });
+    void this.updatePreview();
     // In this version only the clinical part of a visit can be edited
     for (const name of ['birthYear', 'sex', 'community', 'consentGiven'] as const) {
       this.form.controls[name].disable();
