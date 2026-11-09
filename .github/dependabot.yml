@@ -13,3 +13,7 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    # Angular's packages must move together: one PR for all of them.
+    groups:
+      angular:
+        patterns: ["@angular/*", "@angular-devkit/*"]
