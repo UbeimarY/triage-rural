@@ -14,8 +14,8 @@ const OPTIONS: Priority[] = ['high', 'medium', 'low'];
       <fieldset>
         <legend>¿Qué prioridad asignas?</legend>
         <p class="hint">
-          Sugerencia automática: <strong>{{ display(assessment().priority).label }}</strong>.
-          La decisión final es tuya.
+          Sugerencia automática: <strong>{{ display(assessment().priority).label }}</strong
+          >. La decisión final es tuya.
         </p>
         @for (option of options; track option) {
           <label class="option">
@@ -58,23 +58,68 @@ const OPTIONS: Priority[] = ['high', 'medium', 'low'];
   `,
   styles: `
     .review {
-      display: flex; flex-direction: column; gap: 0.6rem;
-      margin-top: 0.5rem; padding: 1rem; border-radius: var(--radius); background: var(--color-bg);
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-top: 0.5rem;
+      padding: 1rem;
+      border-radius: var(--radius);
+      background: var(--color-bg);
     }
-    fieldset { display: flex; flex-direction: column; gap: 0.4rem; margin: 0; padding: 0; border: none; }
-    legend { font-weight: 700; margin-bottom: 0.25rem; }
-    .hint { margin: 0 0 0.25rem; color: var(--color-muted); font-size: 0.9rem; }
+    fieldset {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+      margin: 0;
+      padding: 0;
+      border: none;
+    }
+    legend {
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+    }
+    .hint {
+      margin: 0 0 0.25rem;
+      color: var(--color-muted);
+      font-size: 0.9rem;
+    }
     .option {
-      display: flex; align-items: center; gap: 0.6rem;
-      min-height: var(--touch-target); padding: 0.5rem 0.75rem;
-      border: 1px solid var(--color-border); border-radius: var(--radius);
-      background: var(--color-surface); font-weight: 600; cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      min-height: var(--touch-target);
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius);
+      background: var(--color-surface);
+      font-weight: 600;
+      cursor: pointer;
     }
-    .option input { width: 1.4rem; height: 1.4rem; min-height: auto; margin: 0; }
-    .reason-label { font-weight: 600; }
-    .error { margin: 0; color: var(--color-danger); font-weight: 600; }
-    .actions { display: flex; gap: 0.5rem; justify-content: flex-end; flex-wrap: wrap; }
-    .secondary { background: var(--color-surface); color: var(--color-primary-dark); border: 1px solid var(--color-primary); }
+    .option input {
+      width: 1.4rem;
+      height: 1.4rem;
+      min-height: auto;
+      margin: 0;
+    }
+    .reason-label {
+      font-weight: 600;
+    }
+    .error {
+      margin: 0;
+      color: var(--color-danger);
+      font-weight: 600;
+    }
+    .actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+    .secondary {
+      background: var(--color-surface);
+      color: var(--color-primary-dark);
+      border: 1px solid var(--color-primary);
+    }
   `,
 })
 export class PriorityReview {

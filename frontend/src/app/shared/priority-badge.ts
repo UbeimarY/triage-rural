@@ -19,14 +19,29 @@ export const PRIORITY_DISPLAY: Record<Priority | 'pending', { icon: string; labe
   `,
   styles: `
     .badge {
-      display: inline-flex; align-items: center; gap: 0.35rem;
-      padding: 0.25rem 0.7rem; border-radius: 999px;
-      font-size: 0.85rem; font-weight: 700; white-space: nowrap;
-      background: var(--color-bg); color: var(--color-muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.25rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      white-space: nowrap;
+      background: var(--color-bg);
+      color: var(--color-muted);
     }
-    [data-priority='high'] { background: var(--priority-high-bg); color: var(--priority-high); }
-    [data-priority='medium'] { background: var(--priority-medium-bg); color: var(--priority-medium); }
-    [data-priority='low'] { background: var(--priority-low-bg); color: var(--priority-low); }
+    [data-priority='high'] {
+      background: var(--priority-high-bg);
+      color: var(--priority-high);
+    }
+    [data-priority='medium'] {
+      background: var(--priority-medium-bg);
+      color: var(--priority-medium);
+    }
+    [data-priority='low'] {
+      background: var(--priority-low-bg);
+      color: var(--priority-low);
+    }
   `,
 })
 export class PriorityBadge {

@@ -25,7 +25,9 @@ export class AppUpdateService {
       .subscribe(() => this.updateAvailable.set(true));
 
     // If the cached version is broken and cannot be recovered, reload to get a clean one
-    this.swUpdate.unrecoverable.pipe(takeUntilDestroyed()).subscribe(() => document.location.reload());
+    this.swUpdate.unrecoverable
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => document.location.reload());
   }
 
   applyUpdate(): void {
