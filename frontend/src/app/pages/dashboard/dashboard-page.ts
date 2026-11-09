@@ -51,107 +51,171 @@ type Filter = 'all' | Priority | 'unclassified';
       <p class="error" role="alert">{{ error() }}</p>
     }
 
-    @if (summary(); as s) {
-      <section class="stats" aria-label="Resumen">
-        <div class="stat stat--high">
-          <span class="stat__value">{{ s.byPriority.high }}</span>
-          <span>▲ Alta</span>
-        </div>
-        <div class="stat stat--medium">
-          <span class="stat__value">{{ s.byPriority.medium }}</span>
-          <span>■ Intermedia</span>
-        </div>
-        <div class="stat stat--low">
-          <span class="stat__value">{{ s.byPriority.low }}</span>
-          <span>▼ Baja</span>
-        </div>
-        <div class="stat">
-          <span class="stat__value">{{ s.awaitingReview }}</span>
-          <span>Alta sin revisar</span>
-        </div>
-      </section>
+    <div class="columns">
+      <div class="overview">
+        @if (summary(); as s) {
+          <section class="stats" aria-label="Resumen">
+            <div class="stat stat--high">
+              <span class="stat__value">{{ s.byPriority.high }}</span>
+              <span>▲ Alta</span>
+            </div>
+            <div class="stat stat--medium">
+              <span class="stat__value">{{ s.byPriority.medium }}</span>
+              <span>■ Intermedia</span>
+            </div>
+            <div class="stat stat--low">
+              <span class="stat__value">{{ s.byPriority.low }}</span>
+              <span>▼ Baja</span>
+            </div>
+            <div class="stat">
+              <span class="stat__value">{{ s.awaitingReview }}</span>
+              <span>Alta sin revisar</span>
+            </div>
+          </section>
 
-      <p class="meta">
-        {{ s.totalVisits }} visitas en total
-        @if (s.loweredByPromoter > 0) {
-          · {{ s.loweredByPromoter }} con prioridad bajada por el promotor (con motivo escrito)
-        }
-        @if (s.lastReceivedAt) {
-          · última recibida {{ s.lastReceivedAt | date: 'd MMM, h:mm a' }}
-        }
-      </p>
+          @if (s.totalVisits > 0) {
+            <div class="mix" role="img" [attr.aria-label]="mixLabel(s.byPriority, s.totalVisits)">
+              <span class="mix__high" [style.flex-grow]="s.byPriority.high"></span>
+              <span class="mix__medium" [style.flex-grow]="s.byPriority.medium"></span>
+              <span class="mix__low" [style.flex-grow]="s.byPriority.low"></span>
+              <span class="mix__none" [style.flex-grow]="s.byPriority.unclassified"></span>
+            </div>
+          }
 
-      @if (s.byCommunity.length > 0) {
-        <section class="card">
-          <h2>Visitas por comunidad</h2>
-          <ul class="bars">
-            @for (row of s.byCommunity; track row.community) {
-              <li>
-                <span class="bars__name">{{ row.community }}</span>
-                <span class="bars__track" aria-hidden="true">
-                  <span
-                    class="bars__fill"
-                    [style.width.%]="(row.visits / s.byCommunity[0].visits) * 100"
-                  ></span>
-                </span>
-                <span class="bars__value">{{ row.visits }}</span>
-              </li>
+          <p class="meta">
+            {{ s.totalVisits }} visitas en total
+            @if (s.loweredByPromoter > 0) {
+              · {{ s.loweredByPromoter }} con prioridad bajada por el promotor (con motivo escrito)
             }
-          </ul>
-        </section>
+            @if (s.lastReceivedAt) {
+              · última recibida {{ s.lastReceivedAt | date: 'd MMM, h:mm a' }}
+            }
+          </p>
+
+          @if (s.byCommunity.length > 0) {
+            <section class="card">
+              <h2>Visitas por comunidad</h2>
+              <ul class="bars">
+                @for (row of s.byCommunity; track row.community) {
+                  <li>
+                    <span class="bars__name">{{ row.community }}</span>
+                    <span class="bars__track" aria-hidden="true">
+                      <span
+                        class="bars__fill"
+                        [style.width.%]="(row.visits / s.byCommunity[0].visits) * 100"
+                      ></span>
+                    </span>
+                    <span class="bars__value">{{ row.visits }}</span>
+                  </li>
+                }
+              </ul>
+            </section>
+          }
+        }
+      </div>
+
+      <section class="queue" aria-labelledby="queue-title">
+        <h2 id="queue-title">Visitas por atender</h2>
+        <div class="filters" role="group" aria-label="Filtrar por prioridad">
+          @for (option of filters; track option.value) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="filter() === option.value"
+              [attr.aria-pressed]="filter() === option.value"
+              (click)="select(option.value)"
+            >
+              {{ option.label }}
+            </button>
+          }
+        </div>
+
+        <ul class="visit-list">
+          @for (visit of visits(); track visit.encounterId) {
+            <li class="card visit" [attr.data-priority]="visit.finalPriority ?? 'none'">
+              <div class="row">
+                <strong>Paciente {{ visit.patientCode }}</strong>
+                <app-priority-badge
+                  [priority]="visit.finalPriority ?? visit.suggestedPriority ?? undefined"
+                />
+              </div>
+              <p class="meta">
+                ≈ {{ visit.age }} años · {{ visit.community }} · {{ visit.promoterName }} ·
+                {{ visit.createdAt | date: 'd MMM, h:mm a' }}
+              </p>
+              <p class="symptoms">{{ visit.symptoms }}</p>
+              <p class="meta">
+                @if (visit.alarmCount > 0) {
+                  <strong class="alarm">⚠ {{ visit.alarmCount }} signo(s) de alarma</strong> ·
+                }
+                {{
+                  visit.source === 'model'
+                    ? 'Sugerida por la IA'
+                    : visit.source === 'rules'
+                      ? 'Regla de alarma'
+                      : 'Sin clasificar'
+                }}
+                · {{ visit.reviewed ? '✓ revisada por el promotor' : 'sin revisar' }}
+              </p>
+            </li>
+          } @empty {
+            @if (!loading()) {
+              <li class="muted">No hay visitas sincronizadas con este filtro.</li>
+            }
+          }
+        </ul>
+      </section>
+    </div>
+  `,
+  styles: `
+    /* Desktop: overview on the left, the queue of visits on the right. */
+    .columns {
+      display: grid;
+      gap: 1.25rem;
+    }
+    .overview {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .queue h2 {
+      font-size: 1.15rem;
+      margin-bottom: 0.6rem;
+    }
+    @media (min-width: 1000px) {
+      .columns {
+        grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+        align-items: start;
+      }
+      .overview {
+        position: sticky;
+        top: 5rem;
       }
     }
 
-    <div class="filters" role="group" aria-label="Filtrar por prioridad">
-      @for (option of filters; track option.value) {
-        <button
-          type="button"
-          class="chip"
-          [class.active]="filter() === option.value"
-          [attr.aria-pressed]="filter() === option.value"
-          (click)="select(option.value)"
-        >
-          {{ option.label }}
-        </button>
-      }
-    </div>
+    .mix {
+      display: flex;
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: var(--color-border);
+    }
+    .mix span {
+      flex-basis: 0;
+    }
+    .mix__high {
+      background: var(--priority-high);
+    }
+    .mix__medium {
+      background: #d9a54a;
+    }
+    .mix__low {
+      background: #4f9d6c;
+    }
+    .mix__none {
+      background: #b8c3be;
+    }
 
-    <ul class="visit-list">
-      @for (visit of visits(); track visit.encounterId) {
-        <li class="card visit">
-          <div class="row">
-            <strong>Paciente {{ visit.patientCode }}</strong>
-            <app-priority-badge
-              [priority]="visit.finalPriority ?? visit.suggestedPriority ?? undefined"
-            />
-          </div>
-          <p class="meta">
-            ≈ {{ visit.age }} años · {{ visit.community }} · {{ visit.promoterName }} ·
-            {{ visit.createdAt | date: 'd MMM, h:mm a' }}
-          </p>
-          <p class="symptoms">{{ visit.symptoms }}</p>
-          <p class="meta">
-            @if (visit.alarmCount > 0) {
-              <strong class="alarm">⚠ {{ visit.alarmCount }} signo(s) de alarma</strong> ·
-            }
-            {{
-              visit.source === 'model'
-                ? 'Sugerida por la IA'
-                : visit.source === 'rules'
-                  ? 'Regla de alarma'
-                  : 'Sin clasificar'
-            }}
-            · {{ visit.reviewed ? '✓ revisada por el promotor' : 'sin revisar' }}
-          </p>
-        </li>
-      } @empty {
-        @if (!loading()) {
-          <li class="muted">No hay visitas sincronizadas con este filtro.</li>
-        }
-      }
-    </ul>
-  `,
-  styles: `
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -282,6 +346,16 @@ type Filter = 'all' | Priority | 'unclassified';
       flex-direction: column;
       gap: 0.4rem;
       margin: 0;
+      border-left: 6px solid var(--color-border);
+    }
+    .visit[data-priority='high'] {
+      border-left-color: var(--priority-high);
+    }
+    .visit[data-priority='medium'] {
+      border-left-color: #d9a54a;
+    }
+    .visit[data-priority='low'] {
+      border-left-color: #4f9d6c;
     }
     .row {
       display: flex;
@@ -299,6 +373,12 @@ type Filter = 'all' | Priority | 'unclassified';
 })
 export class DashboardPage {
   private readonly api = inject(ApiClient);
+
+  mixLabel(by: Summary['byPriority'], total: number): string {
+    const share = (n: number) => Math.round((n / total) * 100);
+    return `Alta ${share(by.high)} %, intermedia ${share(by.medium)} %, baja ${share(by.low)} %`;
+  }
+
   readonly connectivity = inject(ConnectivityService);
 
   readonly summary = signal<Summary | null>(null);
