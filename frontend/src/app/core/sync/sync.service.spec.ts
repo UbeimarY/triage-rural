@@ -75,6 +75,44 @@ describe('SyncService', () => {
     expect((await db.encounters.get(encounter.id))?.syncStatus).toBe('synced');
   });
 
+  it('marks a visit synced only once its priority and review reach the server', async () => {
+    const repository = TestBed.inject(EncounterRepository);
+    const { encounter } = await registerVisit();
+    await repository.saveAssessment(encounter.id, encounter.version, {
+      priority: 'medium',
+      source: 'model',
+      triggeredAlarms: [],
+      reasonCodes: ['MODEL_PREDICTION'],
+      modelVersion: 'triage-text-v1',
+      elapsedMs: 3,
+    });
+    await repository.reviewAssessment(encounter.id, encounter.version, 'medium', '');
+
+    // First upload: the visit arrives, the assessment operations must wait.
+    push = (body) => ({
+      results: body.operations.map((operation) => ({
+        operationId: operation.id,
+        status: operation.entity === 'assessment' ? 'retry' : 'applied',
+        code: null,
+        serverVersion: null,
+        serverRecord: null,
+      })),
+    });
+    const sync = TestBed.inject(SyncService);
+    await sync.syncNow();
+    expect((await db.encounters.get(encounter.id))?.syncStatus).toBe('pending');
+
+    // Second upload: they arrive too, so the visit is now synced.
+    push = answer('applied');
+    await sync.syncNow();
+    expect(await db.outbox.count()).toBe(0);
+    expect((await db.encounters.get(encounter.id))?.syncStatus).toBe('synced');
+
+    // A later review makes it pending again until it is uploaded.
+    await repository.reviewAssessment(encounter.id, encounter.version, 'high', '');
+    expect((await db.encounters.get(encounter.id))?.syncStatus).toBe('pending');
+  });
+
   it('keeps operations the server asks to retry', async () => {
     await registerVisit();
     push = answer('retry', { code: 'PATIENT_NOT_FOUND' });

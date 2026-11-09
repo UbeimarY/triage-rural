@@ -191,14 +191,15 @@ export class SyncService {
     return progressed;
   }
 
-  /** A record is synced once none of its operations is waiting, failed or in conflict. */
+  /**
+   * A record is synced once none of its operations is waiting, failed or in conflict.
+   * An assessment belongs to its visit (same id), so it updates the visit's status:
+   * the visit is not "synced" until its priority and review are on the server too.
+   */
   private async refreshStatus(operation: OutboxOperation): Promise<void> {
-    if (operation.entity === 'assessment') return;
     const remaining = await this.db.outbox.where('entityId').equals(operation.entityId).toArray();
     const conflict =
-      operation.entity === 'encounter'
-        ? await this.db.conflicts.get(operation.entityId)
-        : undefined;
+      operation.entity === 'patient' ? undefined : await this.db.conflicts.get(operation.entityId);
     const status =
       conflict || remaining.some((pending) => pending.rejectedCode)
         ? 'error'

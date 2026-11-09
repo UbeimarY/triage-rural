@@ -147,6 +147,7 @@ export class EncounterRepository {
         };
 
         await this.db.assessments.put(assessment);
+        await this.db.encounters.update(encounterId, { syncStatus: 'pending' });
         await this.db.outbox.add(
           createOperation('assessment', existing ? 'update' : 'create', encounterId, {
             ...assessment,
@@ -167,7 +168,8 @@ export class EncounterRepository {
     finalPriority: Priority,
     note: string,
   ): Promise<TriageAssessment> {
-    return this.db.transaction('rw', [this.db.assessments, this.db.outbox], async () => {
+    const tables = [this.db.encounters, this.db.assessments, this.db.outbox];
+    return this.db.transaction('rw', tables, async () => {
       const current = await this.db.assessments.get(encounterId);
       if (!current || current.encounterVersion !== encounterVersion) {
         throw new Error('ASSESSMENT_OUTDATED');
@@ -186,6 +188,8 @@ export class EncounterRepository {
       };
 
       await this.db.assessments.put(reviewed);
+      // The review still has to reach the server: the visit is pending until it does.
+      await this.db.encounters.update(encounterId, { syncStatus: 'pending' });
       await this.db.outbox.add(
         createOperation('assessment', 'update', encounterId, { ...reviewed }),
       );
