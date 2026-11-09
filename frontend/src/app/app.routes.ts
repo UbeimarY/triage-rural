@@ -6,15 +6,24 @@ import { SessionStore } from './core/auth/session.store';
 const coordinatorGuard: CanActivateFn = () =>
   inject(SessionStore).isCoordinator() || inject(Router).createUrlTree(['/login']);
 
+/**
+ * Registering visits is the promoters' job; coordinators follow them on the dashboard.
+ * Without a session the screens stay open: a promoter can work before signing in.
+ */
+const promoterAreaGuard: CanActivateFn = () =>
+  !inject(SessionStore).isCoordinator() || inject(Router).createUrlTree(['/dashboard']);
+
 export const routes: Routes = [
   { path: '', pathMatch: 'full', redirectTo: 'patients' },
   {
     path: 'patients',
+    canActivate: [promoterAreaGuard],
     title: 'Pacientes · Triage Rural',
     loadComponent: () => import('./pages/patients/patients-page').then((m) => m.PatientsPage),
   },
   {
     path: 'encounters/new',
+    canActivate: [promoterAreaGuard],
     title: 'Nuevo registro · Triage Rural',
     loadComponent: () =>
       import('./pages/encounter-form/encounter-form-page').then((m) => m.EncounterFormPage),
@@ -22,6 +31,7 @@ export const routes: Routes = [
 
   {
     path: 'encounters/:id/edit',
+    canActivate: [promoterAreaGuard],
     title: 'Editar registro · Triage Rural',
     loadComponent: () =>
       import('./pages/encounter-form/encounter-form-page').then((m) => m.EncounterFormPage),

@@ -4,16 +4,21 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppUpdateService } from './core/app-update.service';
 import { SessionStore } from './core/auth/session.store';
 import { ConnectivityService } from './core/connectivity.service';
+import { NavigationIssue } from './core/navigation-issue';
 import { SyncService } from './core/sync/sync.service';
+import { Icon } from './shared/icon';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Icon],
   template: `
     <a class="skip-link" href="#main">Saltar al contenido</a>
 
     <header class="app-header">
-      <span class="brand"><span aria-hidden="true">✚</span> Triage Rural</span>
+      <span class="brand">
+        <span class="brand__mark"><app-icon name="cross" /></span>
+        <span>Triage Rural <small>Nariño</small></span>
+      </span>
       <span class="status" [class.offline]="!connectivity.online()" role="status">
         @if (connectivity.online()) {
           <span aria-hidden="true">●</span> En línea
@@ -40,6 +45,16 @@ import { SyncService } from './core/sync/sync.service';
       }
     </div>
 
+    @if (navigation.missingScreen()) {
+      <div class="update-banner" role="alert">
+        <span
+          >Esta pantalla aún no está guardada en el teléfono. Conéctate a internet una vez y
+          recarga.</span
+        >
+        <button type="button" (click)="navigation.missingScreen.set(false)">Entendido</button>
+      </div>
+    }
+
     @if (updates.updateAvailable()) {
       <div class="update-banner" role="status">
         <span>Hay una nueva versión disponible.</span>
@@ -57,28 +72,29 @@ import { SyncService } from './core/sync/sync.service';
     </main>
 
     <nav class="bottom-nav" aria-label="Navegación principal">
-      <a routerLink="/patients" routerLinkActive="active" ariaCurrentWhenActive="page">
-        <span class="nav-icon" aria-hidden="true">👥</span>
-        Pacientes
-      </a>
-      <a routerLink="/encounters/new" routerLinkActive="active" ariaCurrentWhenActive="page">
-        <span class="nav-icon" aria-hidden="true">＋</span>
-        Registrar
-      </a>
-      @if (session.isCoordinator()) {
+      @if (!session.isCoordinator()) {
+        <a routerLink="/patients" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <app-icon class="nav-icon" name="patients" />
+          Pacientes
+        </a>
+        <a routerLink="/encounters/new" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <app-icon class="nav-icon" name="register" />
+          Registrar
+        </a>
+      } @else {
         <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <span class="nav-icon" aria-hidden="true">▤</span>
+          <app-icon class="nav-icon" name="panel" />
           Panel
         </a>
       }
       @if (session.user(); as user) {
         <button type="button" class="nav-button" (click)="session.end()">
-          <span class="nav-icon" aria-hidden="true">⎋</span>
+          <app-icon class="nav-icon" name="logout" />
           Salir ({{ user.fullName.split(' ')[0] }})
         </button>
       } @else {
         <a routerLink="/login" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <span class="nav-icon" aria-hidden="true">⇄</span>
+          <app-icon class="nav-icon" name="login" />
           Ingresar
         </a>
       }
@@ -118,8 +134,32 @@ import { SyncService } from './core/sync/sync.service';
       color: #fff;
     }
     .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.6rem;
       font-size: 1.2rem;
       font-weight: 700;
+    }
+    .brand small {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 400;
+      opacity: 0.8;
+      line-height: 1;
+    }
+    .brand__mark {
+      display: grid;
+      place-items: center;
+      width: 2.1rem;
+      height: 2.1rem;
+      border-radius: 10px;
+      background: #fff;
+      color: var(--color-primary);
+    }
+    .brand__mark app-icon ::ng-deep svg {
+      width: 1.3rem;
+      height: 1.3rem;
+      fill: currentColor;
     }
 
     .status {
@@ -193,7 +233,7 @@ import { SyncService } from './core/sync/sync.service';
     .app-main {
       flex: 1;
       width: 100%;
-      max-width: 720px;
+      max-width: 1120px;
       margin: 0 auto;
       padding: 1.25rem 1rem 6rem; // bottom space so the nav never hides content
     }
@@ -204,10 +244,24 @@ import { SyncService } from './core/sync/sync.service';
     .bottom-nav {
       position: fixed;
       inset: auto 0 0 0;
+      z-index: 5;
       display: flex;
       background: var(--color-surface);
       border-top: 1px solid var(--color-border);
+      box-shadow: 0 -4px 16px -8px rgb(27 38 33 / 0.18);
       padding-bottom: env(safe-area-inset-bottom);
+    }
+    @media (min-width: 900px) {
+      .bottom-nav {
+        left: 50%;
+        right: auto;
+        bottom: 1rem;
+        width: 560px;
+        transform: translateX(-50%);
+        border: 1px solid var(--color-border);
+        border-radius: 18px;
+        overflow: hidden;
+      }
     }
     .bottom-nav a {
       flex: 1;
@@ -236,14 +290,14 @@ import { SyncService } from './core/sync/sync.service';
       box-shadow: inset 0 3px 0 var(--color-primary);
     }
     .nav-icon {
-      font-size: 1.4rem;
-      line-height: 1;
+      margin-bottom: 0.15rem;
     }
   `,
 })
 export class App {
   readonly connectivity = inject(ConnectivityService);
   readonly updates = inject(AppUpdateService);
+  readonly navigation = inject(NavigationIssue);
   readonly session = inject(SessionStore);
   // Injecting the sync service starts its triggers (network back, app visible, changes).
   readonly sync = inject(SyncService);
