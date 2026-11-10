@@ -47,16 +47,18 @@ import { Icon } from './shared/icon';
       </p>
     }
 
-    <div class="sync-bar" role="status" [attr.data-state]="sync.state()">
-      <span>{{ syncText() }}</span>
-      @if (sync.state() === 'needs-login') {
-        <a routerLink="/login">Ingresar</a>
-      } @else if (session.isSignedIn() && connectivity.online()) {
-        <button type="button" class="link" (click)="sync.syncNow()" [disabled]="sync.isBusy()">
-          Sincronizar ahora
-        </button>
-      }
-    </div>
+    @if (session.isSignedIn()) {
+      <div class="sync-bar" role="status" [attr.data-state]="sync.state()">
+        <span>{{ syncText() }}</span>
+        @if (sync.state() === 'needs-login') {
+          <a routerLink="/login">Ingresar</a>
+        } @else if (session.isSignedIn() && connectivity.online()) {
+          <button type="button" class="link" (click)="sync.syncNow()" [disabled]="sync.isBusy()">
+            Sincronizar ahora
+          </button>
+        }
+      </div>
+    }
 
     @if (navigation.missingScreen()) {
       <div class="update-banner" role="alert">
@@ -84,38 +86,35 @@ import { Icon } from './shared/icon';
       <router-outlet />
     </main>
 
-    <nav class="bottom-nav" aria-label="Navegación principal">
-      @if (!session.isCoordinator()) {
-        <a routerLink="/today" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <app-icon class="nav-icon" name="today" />
-          Hoy
-        </a>
-        <a routerLink="/patients" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <app-icon class="nav-icon" name="patients" />
-          Pacientes
-        </a>
-        <a routerLink="/encounters/new" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <app-icon class="nav-icon" name="register" />
-          Registrar
-        </a>
-      } @else {
-        <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <app-icon class="nav-icon" name="panel" />
-          Panel
-        </a>
-      }
-      @if (session.user(); as user) {
-        <button type="button" class="nav-button" (click)="session.end()">
-          <app-icon class="nav-icon" name="logout" />
-          Salir ({{ user.fullName.split(' ')[0] }})
-        </button>
-      } @else {
-        <a routerLink="/login" routerLinkActive="active" ariaCurrentWhenActive="page">
-          <app-icon class="nav-icon" name="login" />
-          Ingresar
-        </a>
-      }
-    </nav>
+    @if (session.isSignedIn()) {
+      <nav class="bottom-nav" aria-label="Navegación principal">
+        @if (!session.isCoordinator()) {
+          <a routerLink="/today" routerLinkActive="active" ariaCurrentWhenActive="page">
+            <app-icon class="nav-icon" name="today" />
+            Hoy
+          </a>
+          <a routerLink="/patients" routerLinkActive="active" ariaCurrentWhenActive="page">
+            <app-icon class="nav-icon" name="patients" />
+            Pacientes
+          </a>
+          <a routerLink="/encounters/new" routerLinkActive="active" ariaCurrentWhenActive="page">
+            <app-icon class="nav-icon" name="register" />
+            Registrar
+          </a>
+        } @else {
+          <a routerLink="/dashboard" routerLinkActive="active" ariaCurrentWhenActive="page">
+            <app-icon class="nav-icon" name="panel" />
+            Panel
+          </a>
+        }
+        @if (session.user(); as user) {
+          <a routerLink="/salir" routerLinkActive="active" ariaCurrentWhenActive="page">
+            <app-icon class="nav-icon" name="logout" />
+            Salir ({{ user.fullName.split(' ')[0] }})
+          </a>
+        }
+      </nav>
+    }
   `,
   styles: `
     :host {

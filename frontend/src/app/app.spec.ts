@@ -3,6 +3,7 @@ import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { provideServiceWorker } from '@angular/service-worker';
 import { App } from './app';
+import { SessionStore } from './core/auth/session.store';
 import { SyncService } from './core/sync/sync.service';
 
 /** The shell test isolates the layout from the real sync engine and its timers. */
@@ -16,6 +17,7 @@ const syncStub = {
 
 describe('App', () => {
   beforeEach(async () => {
+    localStorage.clear();
     await TestBed.configureTestingModule({
       imports: [App],
       providers: [
@@ -38,9 +40,22 @@ describe('App', () => {
     expect(text).toContain('no es un diagnóstico');
   });
 
-  it('should always show the synchronization state', async () => {
+  it('shows the synchronization state and the navigation once signed in', async () => {
+    TestBed.inject(SessionStore).start({
+      accessToken: 't',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+      user: { id: 'u1', email: 'ana@vereda.co', fullName: 'Ana Pantoja', role: 'promoter' },
+    });
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
-    expect((fixture.nativeElement as HTMLElement).textContent).toContain('Al día');
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('Al día');
+    expect(text).toContain('Salir (Ana)');
+  });
+
+  it('shows no navigation before signing in', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    expect((fixture.nativeElement as HTMLElement).querySelector('nav')).toBeNull();
   });
 });

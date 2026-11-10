@@ -118,6 +118,16 @@ button,
     opacity: 0.55;
     cursor: not-allowed;
   }
+
+  // The quieter of two choices: "Cancelar", "Mostrar", "No lo presenta".
+  &.secondary {
+    background: var(--color-surface);
+    color: var(--color-primary-dark);
+    border: var(--border-width) solid var(--color-primary);
+  }
+  &.secondary:hover:not(:disabled) {
+    background: var(--color-bg);
+  }
 }
 
 input,

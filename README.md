@@ -40,6 +40,10 @@ The API lives in [`triage-rural-backend`](https://github.com/UbeimarY/triage-rur
 
 ## What the promoter sees
 
+- **Sign in first:** no screen with patient data opens without an account. Signing in needs
+  signal once; if the session expires in the field, the promoter keeps working and is asked to
+  sign in again only to sync. **Salir** erases the phone's records, and only once the server has
+  every one of them; another account cannot sign in while someone else's changes are unsent.
 - **Hoy:** who to attend first (high priority not yet reviewed, with waiting time), today's
   visits, and what is left to review or send. One tap registers the next visit.
 - **Three-step registration** (Paciente → Síntomas → Confirmar) with large touch targets.
