@@ -488,7 +488,8 @@ export class DashboardPage {
       const [summary, visits, insights] = await Promise.all([
         this.api.get<Summary>('/dashboard/summary'),
         this.api.get<DashboardVisit[]>(`/dashboard/visits${query}`),
-        this.api.get<Insights>(`/dashboard/insights?days=${this.days()}`),
+        // Trends are extra: the queue of visits must load even if they fail.
+        this.api.get<Insights>(`/dashboard/insights?days=${this.days()}`).catch(() => null),
       ]);
       this.summary.set(summary);
       this.visits.set(visits);
