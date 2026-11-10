@@ -4,6 +4,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AppUpdateService } from './core/app-update.service';
 import { SessionStore } from './core/auth/session.store';
 import { ConnectivityService } from './core/connectivity.service';
+import { DisplayService } from './core/display.service';
 import { NavigationIssue } from './core/navigation-issue';
 import { SyncService } from './core/sync/sync.service';
 import { Icon } from './shared/icon';
@@ -19,12 +20,24 @@ import { Icon } from './shared/icon';
         <span class="brand__mark"><app-icon name="cross" /></span>
         <span>Triage Rural <small>Nariño</small></span>
       </span>
-      <span class="status" [class.offline]="!connectivity.online()" role="status">
-        @if (connectivity.online()) {
-          <span aria-hidden="true">●</span> En línea
-        } @else {
-          <span aria-hidden="true">○</span> Sin conexión
-        }
+      <span class="header-tools">
+        <span class="status" [class.offline]="!connectivity.online()" role="status">
+          @if (connectivity.online()) {
+            <span aria-hidden="true">●</span> En línea
+          } @else {
+            <span aria-hidden="true">○</span> Sin conexión
+          }
+        </span>
+        <button
+          type="button"
+          class="sun-toggle"
+          [attr.aria-pressed]="display.sun()"
+          (click)="display.toggleSun()"
+          title="Más contraste y letra más grande para leer al sol"
+        >
+          <app-icon name="sun" />
+          <span>Modo sol</span>
+        </button>
       </span>
     </header>
 
@@ -140,6 +153,9 @@ import { Icon } from './shared/icon';
       font-size: 1.2rem;
       font-weight: 700;
     }
+    .brand {
+      white-space: nowrap;
+    }
     .brand small {
       display: block;
       font-size: 0.75rem;
@@ -160,6 +176,38 @@ import { Icon } from './shared/icon';
       width: 1.3rem;
       height: 1.3rem;
       fill: currentColor;
+    }
+
+    .header-tools {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .sun-toggle {
+      min-height: 40px;
+      padding: 0.3rem 0.7rem;
+      gap: 0.35rem;
+      border: 1px solid rgb(255 255 255 / 0.5);
+      background: transparent;
+      font-size: 0.85rem;
+    }
+    .sun-toggle app-icon ::ng-deep svg {
+      width: 1.2rem;
+      height: 1.2rem;
+    }
+    .sun-toggle[aria-pressed='true'] {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+    @media (max-width: 420px) {
+      .sun-toggle span {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+      }
     }
 
     .status {
@@ -299,6 +347,7 @@ export class App {
   readonly updates = inject(AppUpdateService);
   readonly navigation = inject(NavigationIssue);
   readonly session = inject(SessionStore);
+  readonly display = inject(DisplayService);
   // Injecting the sync service starts its triggers (network back, app visible, changes).
   readonly sync = inject(SyncService);
   private readonly dates = new DatePipe('es-CO');

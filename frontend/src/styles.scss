@@ -18,11 +18,40 @@
   --priority-low: #1c6638;
   --priority-low-bg: #e2f3e7;
 
+  // Highlights of the symptoms note: what the AI read.
+  --evidence-for: #b07800;
+  --evidence-for-bg: #ffe9a8;
+  --evidence-against: #3d7fa8;
+  --evidence-against-bg: #dcedf7;
+
+  --border-width: 1px;
   --radius: 12px;
   --shadow: 0 1px 2px rgb(27 38 33 / 0.06), 0 4px 14px -6px rgb(27 38 33 / 0.14);
   --font: 'Atkinson Hyperlegible', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --touch-target: 48px; // minimum recommended size for touch targets
   --space: 1rem;
+}
+
+// "Modo sol": the phone is read outdoors at noon. Pure black on white, bolder
+// borders and larger text; priority colors darken so they survive glare.
+:root[data-display='sun'] {
+  --color-bg: #ffffff;
+  --color-surface: #ffffff;
+  --color-text: #000000;
+  --color-muted: #1f2b26;
+  --color-border: #1b2621;
+  --color-primary: #054634;
+  --color-primary-dark: #02261c;
+  --priority-high: #7d0d08;
+  --priority-medium: #4d2e00;
+  --priority-low: #0b3f1f;
+  --evidence-for: #6b4900;
+  --evidence-for-bg: #ffd75e;
+  --evidence-against-bg: #b9dcf0;
+  --shadow: none;
+  --border-width: 2px;
+  --touch-target: 56px;
+  font-size: 118.75%; // 19px base instead of 16px
 }
 
 *,
@@ -97,7 +126,7 @@ textarea {
   width: 100%;
   min-height: var(--touch-target);
   padding: 0.75rem;
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
   font: inherit;
   background: var(--color-surface);
@@ -113,7 +142,7 @@ textarea {
 // ---------- Utilities ----------
 .card {
   background: var(--color-surface);
-  border: 1px solid var(--color-border);
+  border: var(--border-width) solid var(--color-border);
   border-radius: var(--radius);
   padding: 1.25rem;
   box-shadow: var(--shadow);
