@@ -38,36 +38,52 @@ The API lives in [`triage-rural-backend`](https://github.com/UbeimarY/triage-rur
   one bad record never blocks the rest.
 - Records synced by one account are never uploaded under another account on the same phone.
 
+## What the promoter sees
+
+- **Hoy:** who to attend first (high priority not yet reviewed, with waiting time), today's
+  visits, and what is left to review or send. One tap registers the next visit.
+- **Three-step registration** (Paciente → Síntomas → Confirmar) with large touch targets.
+- **How the AI read the note:** words that weighed for the suggestion are highlighted, findings
+  written as absent ("sin fiebre") are struck through.
+- **Follow-up questions:** "La nota menciona dolor en el pecho, ¿lo presenta?" marks the alarm
+  question with one tap. Free text never raises the priority on its own.
+- **Modo sol:** black on white, larger text and thicker borders for reading at noon.
+- **Coordinators:** daily trend by priority, how often promoters keep the AI's suggestion, time
+  from registration to sync, a CSV export without the symptoms note, and promoter accounts.
+
 ## AI module
 
 Three safety layers, in order:
 
-1. **Alarm-sign rules** asked as explicit yes/no questions (never detected from free text, so
-   "no tiene dificultad para respirar" can never trigger an alarm). Any alarm means **high**.
-2. **On-device text model** for visits without alarms: TF-IDF (unigrams + bigrams) + multinomial
-   logistic regression, trained in Python with scikit-learn and executed in TypeScript.
+1. **Alarm-sign rules** asked as explicit yes/no questions. Any alarm means **high**.
+2. **On-device text model** (`triage-text-v2`) for visits without alarms: TF-IDF over
+   negation-aware words, word pairs and four-letter pieces (for typos), multinomial logistic
+   regression with **temperature scaling** for calibrated certainty. Trained in Python with
+   scikit-learn, executed in TypeScript inside a web worker, offline.
 3. **Promoter review:** every suggestion can be confirmed or changed; lowering it requires a
    written reason.
 
-**Python ↔ TypeScript equivalence:** a unit test runs 42 texts (including accents, capitals, `ñ`
-and an empty text) through the TypeScript inference and checks it reproduces the probabilities
-Python computed, within 10⁻⁶.
+**Python ↔ TypeScript equivalence:** a unit test runs 49 texts (accents, capitals, `ñ`, typos,
+denials, an empty text) through the TypeScript code and checks it builds the same features and
+reproduces the probabilities Python computed, within 10⁻⁶.
 
-### Metrics (held-out scenarios never seen in training)
+### Metrics (same synthetic data, scenarios never seen in training)
 
-| | Recall high | Recall medium | Recall low | Macro F1 |
-|---|---|---|---|---|
-| **Model** (`triage-text-v1`) | **0.959** | 1.000 | 1.000 | **0.986** |
-| Baseline: rules only (no alarms → medium) | 0.000 | 1.000 | 0.000 | 0.168 |
-| Baseline: majority class | — | — | — | 0.173 |
+| | v1: words + word pairs | **v2** |
+|---|---|---|
+| Recall of urgent cases | 0.986 | **1.000** |
+| Recall of urgent cases, with typos | 0.955 | **1.000** |
+| Denied urgent findings wrongly called urgent | 41.4 % | **5.7 %** |
+| Expected calibration error | 0.060 | **0.004** |
 
-Decision rule: **high** if `P(high) ≥ 0.59`, chosen by cross-validation to reach a recall of high
-of at least 0.95, because missing an urgent case is worse than a false alarm.
+Decision rule: **high** if `P(high) ≥ 0.70`, chosen by grouped cross-validation to keep the
+recall of high at 0.95 or more, because missing an urgent case is worse than a false alarm. A
+note with no word the model knows stays **medium**.
 
 **Limitations, stated plainly:** the dataset is synthetic and written by the developer (generator
 and model card in the backend repository), so near-perfect scores are expected and do **not**
-predict performance on real notes. It was not validated by health professionals, and the
-three-level scale is not an official triage scale.
+predict performance on real notes. Denial is handled by rules, not understanding. It was not
+validated by health professionals, and the three-level scale is not an official triage scale.
 
 ## Privacy (Ley 1581 de 2012)
 
