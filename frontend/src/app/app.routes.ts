@@ -14,7 +14,13 @@ const promoterAreaGuard: CanActivateFn = () =>
   !inject(SessionStore).isCoordinator() || inject(Router).createUrlTree(['/dashboard']);
 
 export const routes: Routes = [
-  { path: '', pathMatch: 'full', redirectTo: 'patients' },
+  { path: '', pathMatch: 'full', redirectTo: 'today' },
+  {
+    path: 'today',
+    canActivate: [promoterAreaGuard],
+    title: 'Hoy · Triage Rural',
+    loadComponent: () => import('./pages/today/today-page').then((m) => m.TodayPage),
+  },
   {
     path: 'patients',
     canActivate: [promoterAreaGuard],

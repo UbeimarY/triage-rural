@@ -111,7 +111,7 @@ export class LoginPage {
       const response = await this.api.post<LoginResponse>('/auth/login', this.form.getRawValue());
       this.session.start(response);
       await this.router.navigateByUrl(
-        response.user.role === 'coordinator' ? '/dashboard' : '/patients',
+        response.user.role === 'coordinator' ? '/dashboard' : '/today',
       );
     } catch (caught) {
       this.error.set(describeApiError(caught));

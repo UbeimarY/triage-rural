@@ -86,6 +86,10 @@ import { Icon } from './shared/icon';
 
     <nav class="bottom-nav" aria-label="Navegación principal">
       @if (!session.isCoordinator()) {
+        <a routerLink="/today" routerLinkActive="active" ariaCurrentWhenActive="page">
+          <app-icon class="nav-icon" name="today" />
+          Hoy
+        </a>
         <a routerLink="/patients" routerLinkActive="active" ariaCurrentWhenActive="page">
           <app-icon class="nav-icon" name="patients" />
           Pacientes
