@@ -1,100 +1,192 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { NgTemplateOutlet } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { debounceTime, merge } from 'rxjs';
+import { debounceTime, map, merge } from 'rxjs';
 import { EncounterRepository } from '../../core/db/encounter.repository';
 import { AlarmAnswers, Sex, TriageResult } from '../../core/db/models';
 import { ALARM_SIGNS } from '../../core/triage/alarm-signs';
-import {
-  DETAIL_PROMPTS,
-  explainResult,
-  needsMoreDetail,
-  NoteSegment,
-  noteSegments,
-} from '../../core/triage/explain';
+import { DETAIL_PROMPTS, explainResult, needsMoreDetail } from '../../core/triage/explain';
 import { TriageRunner } from '../../core/triage/triage-runner.service';
 import { TriageService } from '../../core/triage/triage.service';
+import { NoteHighlight } from '../../shared/note-highlight';
 import { PriorityBadge } from '../../shared/priority-badge';
 
 type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven';
 
+/** The fields each step validates before moving on. */
+const STEP_FIELDS: readonly (readonly FieldName[])[] = [
+  ['birthYear', 'sex', 'community'],
+  ['symptoms'],
+  ['consentGiven'],
+];
+
 @Component({
   selector: 'app-encounter-form-page',
-  imports: [ReactiveFormsModule, RouterLink, PriorityBadge],
+  imports: [ReactiveFormsModule, RouterLink, NgTemplateOutlet, PriorityBadge, NoteHighlight],
   template: `
     <h1>{{ isEdit ? 'Editar registro' : 'Nuevo registro' }}</h1>
     @if (patientCode(); as code) {
       <p class="muted">Paciente {{ code }}</p>
     }
-    <p class="local-note">Los datos se guardan primero en este dispositivo, con o sin conexión.</p>
+
+    <ol class="steps" aria-label="Pasos del registro">
+      @for (name of stepNames; track $index) {
+        <li
+          [class.done]="$index < step()"
+          [class.current]="$index === step()"
+          [attr.aria-current]="$index === step() ? 'step' : null"
+        >
+          <span class="steps__dot" aria-hidden="true">{{
+            $index < step() ? '✓' : $index + 1
+          }}</span>
+          <span>{{ name }}</span>
+        </li>
+      }
+    </ol>
 
     <form [formGroup]="form" (ngSubmit)="save()" novalidate class="card form">
-      <fieldset>
-        <legend>Datos del paciente</legend>
-        <p class="hint">Registra solo datos mínimos: sin nombres, documentos ni teléfonos.</p>
+      <h2 id="step-title" class="step-title" tabindex="-1">
+        Paso {{ step() + 1 }} de 3 · {{ stepNames[step()] }}
+      </h2>
 
-        <label for="birthYear">Año de nacimiento</label>
-        <input
-          id="birthYear"
-          type="number"
-          inputmode="numeric"
-          formControlName="birthYear"
-          [attr.aria-invalid]="invalid('birthYear')"
-        />
-        @if (invalid('birthYear')) {
-          <p class="field-error">
-            Ingresa un año válido. Solo se registran personas adultas (18 años o más).
-          </p>
+      @switch (step()) {
+        @case (0) {
+          <fieldset>
+            <legend class="visually-hidden">Datos del paciente</legend>
+            <p class="hint">Registra solo datos mínimos: sin nombres, documentos ni teléfonos.</p>
+
+            <label for="birthYear">Año de nacimiento</label>
+            <input
+              id="birthYear"
+              type="number"
+              inputmode="numeric"
+              formControlName="birthYear"
+              [attr.aria-invalid]="invalid('birthYear')"
+            />
+            @if (invalid('birthYear')) {
+              <p class="field-error">
+                Ingresa un año válido. Solo se registran personas adultas (18 años o más).
+              </p>
+            }
+
+            <span class="label" id="sex-label">Sexo</span>
+            <div class="choices" role="radiogroup" aria-labelledby="sex-label">
+              @for (option of sexOptions; track option.value) {
+                <label class="choice">
+                  <input type="radio" formControlName="sex" [value]="option.value" />
+                  <span>{{ option.label }}</span>
+                </label>
+              }
+            </div>
+            @if (invalid('sex')) {
+              <p class="field-error">Selecciona una opción.</p>
+            }
+
+            <label for="community">Comunidad o vereda</label>
+            <input
+              id="community"
+              formControlName="community"
+              list="communities"
+              autocomplete="off"
+              [attr.aria-invalid]="invalid('community')"
+            />
+            <datalist id="communities">
+              @for (name of knownCommunities(); track name) {
+                <option [value]="name"></option>
+              }
+            </datalist>
+            @if (invalid('community')) {
+              <p class="field-error">Indica la comunidad o vereda (máximo 80 caracteres).</p>
+            }
+          </fieldset>
         }
 
-        <label for="sex">Sexo</label>
-        <select id="sex" formControlName="sex" [attr.aria-invalid]="invalid('sex')">
-          <option value="" disabled>Selecciona una opción</option>
-          <option value="female">Femenino</option>
-          <option value="male">Masculino</option>
-          <option value="other">Otro</option>
-        </select>
-        @if (invalid('sex')) {
-          <p class="field-error">Selecciona una opción.</p>
+        @case (1) {
+          <fieldset>
+            <legend class="visually-hidden">Síntomas</legend>
+            <label for="symptoms">Describe los síntomas con tus palabras</label>
+            <p class="hint" id="symptoms-hint">
+              Escribe también lo que <em>no</em> tiene: «sin fiebre», «niega dolor de pecho».
+            </p>
+            <textarea
+              id="symptoms"
+              rows="4"
+              formControlName="symptoms"
+              aria-describedby="symptoms-hint"
+              [attr.aria-invalid]="invalid('symptoms')"
+            ></textarea>
+            @if (invalid('symptoms')) {
+              <p class="field-error">Describe los síntomas (entre 10 y 1000 caracteres).</p>
+            }
+          </fieldset>
+
+          <fieldset formGroupName="alarms">
+            <legend>Signos de alarma</legend>
+            <p class="hint">Marca solo lo que el paciente presenta ahora.</p>
+            @for (sign of alarmSigns; track sign.key) {
+              <label class="check" [class.checked]="form.controls.alarms.controls[sign.key].value">
+                <input type="checkbox" [formControlName]="sign.key" />
+                <span>{{ sign.label }}</span>
+              </label>
+            }
+          </fieldset>
+
+          <ng-container *ngTemplateOutlet="previewBlock" />
         }
 
-        <label for="community">Comunidad o vereda</label>
-        <input
-          id="community"
-          formControlName="community"
-          [attr.aria-invalid]="invalid('community')"
-        />
-        @if (invalid('community')) {
-          <p class="field-error">Indica la comunidad o vereda (máximo 80 caracteres).</p>
-        }
-      </fieldset>
+        @case (2) {
+          <dl class="summary">
+            @if (!isEdit) {
+              <div>
+                <dt>Paciente</dt>
+                <dd>{{ patientLine() }}</dd>
+              </div>
+            }
+            <div>
+              <dt>Signos de alarma</dt>
+              <dd>{{ alarmLine() }}</dd>
+            </div>
+          </dl>
 
-      <fieldset>
-        <legend>Síntomas</legend>
-        <label for="symptoms">Describe los síntomas con tus palabras</label>
-        <textarea
-          id="symptoms"
-          rows="4"
-          formControlName="symptoms"
-          [attr.aria-invalid]="invalid('symptoms')"
-        ></textarea>
-        @if (invalid('symptoms')) {
-          <p class="field-error">Describe los síntomas (entre 10 y 1000 caracteres).</p>
-        }
-      </fieldset>
+          <ng-container *ngTemplateOutlet="previewBlock" />
 
-      <fieldset formGroupName="alarms">
-        <legend>Signos de alarma</legend>
-        <p class="hint">Marca solo lo que el paciente presenta ahora.</p>
-        @for (sign of alarmSigns; track sign.key) {
-          <label class="check">
-            <input type="checkbox" [formControlName]="sign.key" />
-            <span>{{ sign.label }}</span>
+          <label class="check consent">
+            <input type="checkbox" formControlName="consentGiven" />
+            <span
+              >El paciente fue informado y autoriza el registro de sus datos para su atención.</span
+            >
           </label>
+          @if (invalid('consentGiven')) {
+            <p class="field-error">
+              Se requiere la autorización del paciente para guardar el registro.
+            </p>
+          }
         }
-      </fieldset>
+      }
 
+      @if (error()) {
+        <p class="form-error" role="alert">{{ error() }}</p>
+      }
+
+      <div class="actions">
+        @if (step() > firstStep) {
+          <button type="button" class="secondary" (click)="back()">Atrás</button>
+        } @else {
+          <a class="button secondary" routerLink="/today">Cancelar</a>
+        }
+        @if (step() < 2) {
+          <button type="button" (click)="next()">Siguiente</button>
+        } @else {
+          <button type="submit" [disabled]="saving()">
+            {{ saving() ? 'Guardando…' : 'Guardar registro' }}
+          </button>
+        }
+      </div>
+    </form>
+
+    <ng-template #previewBlock>
       <section
         class="preview"
         aria-labelledby="preview-title"
@@ -106,34 +198,10 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
             <app-priority-badge [priority]="result.priority" />
             <p class="preview-reason">{{ explain(result) }}</p>
 
-            @if (segments().length && result.source === 'model') {
+            @if (result.source === 'model' && result.evidence?.length) {
               <figure class="reading">
                 <figcaption>Así leyó la IA tu nota</figcaption>
-                <p class="note">
-                  @for (segment of segments(); track $index) {
-                    @switch (segment.role) {
-                      @case ('for') {
-                        <mark class="for">{{ segment.text }}</mark>
-                      }
-                      @case ('against') {
-                        <mark class="against">{{ segment.text }}</mark>
-                      }
-                      @case ('denied') {
-                        <span class="denied"
-                          >{{ segment.text }}<span class="sr-only"> (negado)</span></span
-                        >
-                      }
-                      @default {
-                        {{ segment.text }}
-                      }
-                    }
-                  }
-                </p>
-                <p class="legend">
-                  <mark class="for">pesa a favor</mark>
-                  <mark class="against">pesa en contra</mark>
-                  <span class="denied">escrito como ausente</span>
-                </p>
+                <app-note-highlight [text]="previewText()" [result]="result" [legend]="true" />
               </figure>
             }
 
@@ -174,28 +242,7 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
           cambiarla.
         </p>
       </section>
-
-      <label class="check consent">
-        <input type="checkbox" formControlName="consentGiven" />
-        <span>El paciente fue informado y autoriza el registro de sus datos para su atención.</span>
-      </label>
-      @if (invalid('consentGiven')) {
-        <p class="field-error">
-          Se requiere la autorización del paciente para guardar el registro.
-        </p>
-      }
-
-      @if (error()) {
-        <p class="form-error" role="alert">{{ error() }}</p>
-      }
-
-      <div class="actions">
-        <a class="button secondary" routerLink="/patients">Cancelar</a>
-        <button type="submit" [disabled]="saving()">
-          {{ saving() ? 'Guardando...' : 'Guardar registro' }}
-        </button>
-      </div>
-    </form>
+    </ng-template>
   `,
   styles: `
     :host {
@@ -211,6 +258,108 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
     .local-note {
       color: var(--color-muted);
       font-size: 0.95rem;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.4rem;
+      margin: 0 0 1rem;
+      padding: 0;
+      list-style: none;
+      counter-reset: none;
+    }
+    .steps li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      padding-top: 0.5rem;
+      border-top: 4px solid var(--color-border);
+      color: var(--color-muted);
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .steps li.done {
+      border-top-color: var(--color-primary);
+    }
+    .steps li.current {
+      border-top-color: var(--color-primary-dark);
+      color: var(--color-text);
+    }
+    .steps__dot {
+      display: grid;
+      place-items: center;
+      width: 1.7rem;
+      height: 1.7rem;
+      border-radius: 50%;
+      border: 2px solid currentColor;
+      font-size: 0.85rem;
+    }
+    .steps li.done .steps__dot,
+    .steps li.current .steps__dot {
+      border-color: var(--color-primary-dark);
+      background: var(--color-primary-dark);
+      color: #fff;
+    }
+    .step-title {
+      margin: 0;
+      font-size: 1.15rem;
+    }
+    .step-title:focus {
+      outline: none;
+    }
+    .label {
+      font-weight: 600;
+      margin-top: 0.5rem;
+    }
+    .choices {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.5rem;
+    }
+    .choice {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      min-height: var(--touch-target);
+      margin: 0;
+      padding: 0.5rem;
+      border: var(--border-width) solid var(--color-border);
+      border-radius: var(--radius);
+      cursor: pointer;
+    }
+    .choice input {
+      width: 1.2rem;
+      height: 1.2rem;
+      min-height: auto;
+      margin: 0;
+      accent-color: var(--color-primary-dark);
+    }
+    .choice:has(input:checked),
+    .check.checked {
+      border-color: var(--color-primary-dark);
+      box-shadow: inset 0 0 0 1px var(--color-primary-dark);
+      background: #eef6f3;
+    }
+    .check.checked {
+      border-color: var(--priority-high);
+      box-shadow: inset 0 0 0 1px var(--priority-high);
+      background: var(--priority-high-bg);
+    }
+    .summary {
+      display: grid;
+      gap: 0.6rem;
+      margin: 0;
+    }
+    .summary dt {
+      font-size: 0.85rem;
+      color: var(--color-muted);
+      font-weight: 700;
+    }
+    .summary dd {
+      margin: 0;
+      font-weight: 600;
     }
 
     .form {
@@ -314,39 +463,10 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
       background: var(--color-surface);
     }
     .reading figcaption {
+      margin-bottom: 0.35rem;
       font-size: 0.85rem;
       font-weight: 700;
       color: var(--color-muted);
-    }
-    .note {
-      margin: 0.35rem 0 0.5rem;
-      line-height: 1.7;
-      white-space: pre-wrap;
-    }
-    mark {
-      padding: 0.05rem 0.2rem;
-      border-radius: 4px;
-      color: inherit;
-    }
-    mark.for {
-      background: #ffe08a;
-      box-shadow: inset 0 -2px 0 #c58a00;
-    }
-    mark.against {
-      background: #d7ecf7;
-      box-shadow: inset 0 -2px 0 #3d7fa8;
-    }
-    .denied {
-      text-decoration: line-through;
-      text-decoration-thickness: 2px;
-      color: var(--color-muted);
-    }
-    .legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem 1rem;
-      margin: 0;
-      font-size: 0.8rem;
     }
     .follow-up,
     .detail {
@@ -372,14 +492,6 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
       flex-wrap: wrap;
       gap: 0.5rem;
       margin-top: 0.5rem;
-    }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
     }
 
     .actions {
@@ -411,11 +523,7 @@ export class EncounterFormPage {
   readonly moreDetail = needsMoreDetail;
   readonly detailPrompts = DETAIL_PROMPTS;
   /** The note exactly as the preview evaluated it: highlights point into this text. */
-  private readonly previewText = signal('');
-  readonly segments = computed<NoteSegment[]>(() => {
-    const result = this.preview();
-    return result ? noteSegments(this.previewText(), result) : [];
-  });
+  readonly previewText = signal('');
   /** Follow-up questions the promoter answered "no" to, so they are not asked again. */
   private readonly dismissed = signal<ReadonlySet<keyof AlarmAnswers>>(new Set());
   readonly pendingFollowUps = computed(() =>
@@ -425,6 +533,22 @@ export class EncounterFormPage {
 
   readonly isEdit = this.encounterId !== null;
   readonly alarmSigns = ALARM_SIGNS;
+  readonly stepNames = ['Paciente', 'Síntomas', 'Confirmar'] as const;
+  readonly sexOptions: { value: Sex; label: string }[] = [
+    { value: 'female', label: 'Femenino' },
+    { value: 'male', label: 'Masculino' },
+    { value: 'other', label: 'Otro' },
+  ];
+  /** Editing changes only the clinical part, so it starts at the symptoms. */
+  readonly firstStep = this.isEdit ? 1 : 0;
+  readonly step = signal(this.firstStep);
+  /** Communities already typed on this phone, offered as suggestions. */
+  readonly knownCommunities = toSignal(
+    this.repository
+      .watchVisits()
+      .pipe(map((visits) => [...new Set(visits.map((v) => v.patient.community))].sort())),
+    { initialValue: [] as string[] },
+  );
   readonly currentYear = new Date().getFullYear();
   readonly saving = signal(false);
   readonly error = signal<string | null>(null);
@@ -469,6 +593,42 @@ export class EncounterFormPage {
     return control.invalid && (control.touched || control.dirty);
   }
 
+  /** Moves on only when this step's answers are valid; errors show where they are. */
+  next(): void {
+    const fields = STEP_FIELDS[this.step()];
+    if (fields.some((name) => this.form.controls[name].invalid)) {
+      fields.forEach((name) => this.form.controls[name].markAsTouched());
+      this.error.set('Revisa los campos marcados.');
+      return;
+    }
+    this.error.set(null);
+    this.goTo(this.step() + 1);
+  }
+
+  back(): void {
+    this.error.set(null);
+    this.goTo(Math.max(this.firstStep, this.step() - 1));
+  }
+
+  patientLine(): string {
+    const { birthYear, sex, community } = this.form.getRawValue();
+    const sexLabel = this.sexOptions.find((o) => o.value === sex)?.label ?? '';
+    const age = birthYear ? `≈ ${this.currentYear - birthYear} años` : '';
+    return [age, sexLabel, community].filter(Boolean).join(' · ');
+  }
+
+  alarmLine(): string {
+    const { alarms } = this.form.getRawValue();
+    const marked = ALARM_SIGNS.filter((sign) => alarms[sign.key]).map((sign) => sign.shortLabel);
+    return marked.length ? marked.join(', ') : 'Ninguno marcado';
+  }
+
+  private goTo(step: number): void {
+    this.step.set(step);
+    // Screen readers and keyboards land on the new step, not on a button that vanished.
+    setTimeout(() => document.getElementById('step-title')?.focus());
+  }
+
   labelFor(key: keyof AlarmAnswers): string {
     return ALARM_SIGNS.find((sign) => sign.key === key)?.label ?? key;
   }
@@ -490,6 +650,10 @@ export class EncounterFormPage {
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       this.error.set('Revisa los campos marcados.');
+      const broken = STEP_FIELDS.findIndex((fields) =>
+        fields.some((name) => this.form.controls[name].invalid),
+      );
+      if (broken >= 0 && broken !== this.step()) this.goTo(broken);
       return;
     }
 

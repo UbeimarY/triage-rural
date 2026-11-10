@@ -7,6 +7,7 @@ import { Priority, SyncStatus } from '../../core/db/models';
 import { explainResult } from '../../core/triage/explain';
 import { effectivePriority, sortByAttention } from '../../core/triage/priority-order';
 import { TriageRunner } from '../../core/triage/triage-runner.service';
+import { NoteHighlight } from '../../shared/note-highlight';
 import { PRIORITY_DISPLAY, PriorityBadge } from '../../shared/priority-badge';
 import { PriorityReview } from './priority-review';
 
@@ -27,7 +28,7 @@ const FILTERS: { value: Filter; label: string; icon: string }[] = [
 
 @Component({
   selector: 'app-patients-page',
-  imports: [DatePipe, RouterLink, PriorityBadge, PriorityReview],
+  imports: [DatePipe, RouterLink, PriorityBadge, PriorityReview, NoteHighlight],
   template: `
     <div class="page-header">
       <h1>Pacientes</h1>
@@ -83,7 +84,15 @@ const FILTERS: { value: Filter; label: string; icon: string }[] = [
                 ≈ {{ age(visit.patient.birthYear) }} años · {{ visit.patient.community }} ·
                 registrado {{ visit.encounter.createdAt | date: 'd MMM, h:mm a' }}
               </p>
-              <p class="symptoms">{{ visit.encounter.symptoms }}</p>
+              @if (visit.assessment?.evidence?.length) {
+                <app-note-highlight
+                  class="symptoms"
+                  [text]="visit.encounter.symptoms"
+                  [result]="visit.assessment!"
+                />
+              } @else {
+                <p class="symptoms">{{ visit.encounter.symptoms }}</p>
+              }
 
               @if (visit.assessment; as assessment) {
                 <p class="reason" [class.alarm]="assessment.triggeredAlarms.length > 0">

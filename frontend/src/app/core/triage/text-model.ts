@@ -101,6 +101,19 @@ const NOT_EXPLANATORY = new Set([
   'porque',
   'viene',
   'dice',
+  // Amounts and times: they qualify a symptom but are not one.
+  'mucho',
+  'poco',
+  'dos',
+  'tres',
+  'dia',
+  'dias',
+  'hoy',
+  'ayer',
+  'anoche',
+  'semana',
+  'semanas',
+  'horas',
 ]);
 
 const DENYING_PRONOUNS = new Set(['se', 'le', 'lo']);
