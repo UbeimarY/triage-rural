@@ -9,7 +9,7 @@ import { TRIAGE_DB } from '../db/triage-db';
 
 const BATCH_SIZE = 50;
 const PERIODIC_MS = 60_000;
-const OWNER_KEY = 'triage.device-owner';
+export const OWNER_KEY = 'triage.device-owner';
 
 type ResultStatus = 'applied' | 'duplicate' | 'conflict' | 'rejected' | 'retry';
 
@@ -70,7 +70,7 @@ export class SyncService {
     // Network lost: say so at once. Back online or freshly signed in: try right away.
     effect(() => {
       const online = this.connectivity.online();
-      const signedIn = this.session.isSignedIn();
+      const signedIn = this.session.token() !== null;
       if (!online) {
         if (untracked(this.state) !== 'syncing') this.state.set('offline');
       } else if (signedIn) {
@@ -102,7 +102,7 @@ export class SyncService {
   private async run(): Promise<void> {
     if (!this.connectivity.online()) return this.state.set('offline');
     const user = this.session.user();
-    if (!user) return this.state.set('needs-login');
+    if (!user || !this.session.token()) return this.state.set('needs-login');
 
     // Records on this phone belong to whoever synchronized first. Uploading them
     // under another account would assign patients to the wrong promoter.
@@ -212,6 +212,11 @@ export class SyncService {
       await this.db.encounters.update(operation.entityId, { syncStatus: status });
     }
   }
+}
+
+/** The account whose records are on this phone, once it synchronized. */
+export function deviceOwner(): string | null {
+  return readOwner();
 }
 
 function readOwner(): string | null {
