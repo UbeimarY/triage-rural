@@ -5,6 +5,8 @@ import { ApiClient, describeApiError } from '../../core/api/api-client';
 import { ConnectivityService } from '../../core/connectivity.service';
 import { Priority } from '../../core/db/models';
 import { PriorityBadge } from '../../shared/priority-badge';
+import { Insights } from './insights';
+import { InsightsPanel } from './insights-panel';
 
 interface Summary {
   totalVisits: number;
@@ -34,13 +36,18 @@ type Filter = 'all' | Priority | 'unclassified';
 
 @Component({
   selector: 'app-dashboard-page',
-  imports: [DatePipe, PriorityBadge],
+  imports: [DatePipe, PriorityBadge, InsightsPanel],
   template: `
     <div class="page-header">
       <h1>Panel de seguimiento</h1>
-      <button type="button" class="secondary" (click)="load()" [disabled]="loading()">
-        Actualizar
-      </button>
+      <div class="header-actions">
+        <button type="button" class="secondary" (click)="exportCsv()" [disabled]="exporting()">
+          {{ exporting() ? 'Preparando…' : 'Descargar CSV' }}
+        </button>
+        <button type="button" class="secondary" (click)="load()" [disabled]="loading()">
+          Actualizar
+        </button>
+      </div>
     </div>
     <p class="lede">Visitas sincronizadas por todos los promotores, las más urgentes primero.</p>
 
@@ -50,6 +57,25 @@ type Filter = 'all' | Priority | 'unclassified';
     @if (error()) {
       <p class="error" role="alert">{{ error() }}</p>
     }
+
+    <section class="insights" aria-label="Tendencias del periodo">
+      <div class="periods" role="group" aria-label="Periodo">
+        @for (option of periods; track option) {
+          <button
+            type="button"
+            class="chip"
+            [class.active]="days() === option"
+            [attr.aria-pressed]="days() === option"
+            (click)="selectDays(option)"
+          >
+            {{ option }} días
+          </button>
+        }
+      </div>
+      @if (insights(); as data) {
+        <app-insights-panel [data]="data" />
+      }
+    </section>
 
     <div class="columns">
       <div class="overview">
@@ -191,6 +217,23 @@ type Filter = 'all' | Priority | 'unclassified';
         position: sticky;
         top: 5rem;
       }
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .insights {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-bottom: 1.25rem;
+    }
+    .periods {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
     }
 
     .mix {
@@ -385,6 +428,10 @@ export class DashboardPage {
   readonly visits = signal<DashboardVisit[]>([]);
   readonly filter = signal<Filter>('all');
   readonly loading = signal(false);
+  readonly exporting = signal(false);
+  readonly insights = signal<Insights | null>(null);
+  readonly days = signal(14);
+  readonly periods = [7, 14, 30] as const;
   readonly error = signal<string | null>(null);
 
   readonly filters: { value: Filter; label: string }[] = [
@@ -404,18 +451,46 @@ export class DashboardPage {
     void this.load();
   }
 
+  selectDays(days: number): void {
+    this.days.set(days);
+    void this.load();
+  }
+
+  async exportCsv(): Promise<void> {
+    this.exporting.set(true);
+    this.error.set(null);
+    const filter = this.filter();
+    try {
+      const blob = await this.api.download(
+        `/dashboard/visits.csv${filter === 'all' ? '' : `?priority=${filter}`}`,
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `visitas-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (caught) {
+      this.error.set(describeApiError(caught));
+    } finally {
+      this.exporting.set(false);
+    }
+  }
+
   async load(): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     const filter = this.filter();
     const query = filter === 'all' ? '' : `?priority=${filter}`;
     try {
-      const [summary, visits] = await Promise.all([
+      const [summary, visits, insights] = await Promise.all([
         this.api.get<Summary>('/dashboard/summary'),
         this.api.get<DashboardVisit[]>(`/dashboard/visits${query}`),
+        this.api.get<Insights>(`/dashboard/insights?days=${this.days()}`),
       ]);
       this.summary.set(summary);
       this.visits.set(visits);
+      this.insights.set(insights);
     } catch (caught) {
       this.error.set(describeApiError(caught));
     } finally {

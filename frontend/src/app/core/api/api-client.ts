@@ -33,7 +33,17 @@ export class ApiClient {
     return this.request<T>('POST', path, body);
   }
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  /** A file the server builds, such as the CSV export. */
+  download(path: string): Promise<Blob> {
+    return this.request<Blob>('GET', path, undefined, true);
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    asBlob = false,
+  ): Promise<T> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     const token = this.session.token();
     if (token) headers['Authorization'] = `Bearer ${token}`;
@@ -59,7 +69,7 @@ export class ApiClient {
       if (response.status === 401 && token) this.session.expire();
       throw new ApiError(response.status, code);
     }
-    return (await response.json()) as T;
+    return (asBlob ? await response.blob() : await response.json()) as T;
   }
 }
 
