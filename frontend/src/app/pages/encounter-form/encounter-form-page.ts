@@ -1,12 +1,18 @@
-import { Component, inject, signal } from '@angular/core';
+import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { debounceTime, merge } from 'rxjs';
 import { EncounterRepository } from '../../core/db/encounter.repository';
-import { Sex, TriageResult } from '../../core/db/models';
+import { AlarmAnswers, Sex, TriageResult } from '../../core/db/models';
 import { ALARM_SIGNS } from '../../core/triage/alarm-signs';
-import { explainResult } from '../../core/triage/explain';
+import {
+  DETAIL_PROMPTS,
+  explainResult,
+  needsMoreDetail,
+  NoteSegment,
+  noteSegments,
+} from '../../core/triage/explain';
 import { TriageRunner } from '../../core/triage/triage-runner.service';
 import { TriageService } from '../../core/triage/triage.service';
 import { PriorityBadge } from '../../shared/priority-badge';
@@ -99,6 +105,64 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
           @if (preview(); as result) {
             <app-priority-badge [priority]="result.priority" />
             <p class="preview-reason">{{ explain(result) }}</p>
+
+            @if (segments().length && result.source === 'model') {
+              <figure class="reading">
+                <figcaption>Así leyó la IA tu nota</figcaption>
+                <p class="note">
+                  @for (segment of segments(); track $index) {
+                    @switch (segment.role) {
+                      @case ('for') {
+                        <mark class="for">{{ segment.text }}</mark>
+                      }
+                      @case ('against') {
+                        <mark class="against">{{ segment.text }}</mark>
+                      }
+                      @case ('denied') {
+                        <span class="denied"
+                          >{{ segment.text }}<span class="sr-only"> (negado)</span></span
+                        >
+                      }
+                      @default {
+                        {{ segment.text }}
+                      }
+                    }
+                  }
+                </p>
+                <p class="legend">
+                  <mark class="for">pesa a favor</mark>
+                  <mark class="against">pesa en contra</mark>
+                  <span class="denied">escrito como ausente</span>
+                </p>
+              </figure>
+            }
+
+            @for (key of pendingFollowUps(); track key) {
+              <div class="follow-up" role="group" [attr.aria-label]="labelFor(key)">
+                <p>
+                  La nota menciona algo de <strong>{{ shortLabelFor(key) }}</strong
+                  >.
+                  {{ labelFor(key) }}
+                </p>
+                <div class="follow-up-actions">
+                  <button type="button" (click)="markAlarm(key)">Sí, marcar</button>
+                  <button type="button" class="secondary" (click)="dismissFollowUp(key)">
+                    No lo presenta
+                  </button>
+                </div>
+              </div>
+            }
+
+            @if (moreDetail(result)) {
+              <div class="detail">
+                <p>Para afinar la sugerencia, agrega a la nota:</p>
+                <ul>
+                  @for (prompt of detailPrompts; track prompt) {
+                    <li>{{ prompt }}</li>
+                  }
+                </ul>
+              </div>
+            }
           } @else {
             <p class="hint">
               Escribe los síntomas o marca un signo de alarma y aquí verás la sugerencia.
@@ -243,6 +307,81 @@ type FieldName = 'birthYear' | 'sex' | 'community' | 'symptoms' | 'consentGiven'
       background: var(--priority-low-bg);
     }
 
+    .reading {
+      margin: 0.5rem 0 0;
+      padding: 0.75rem;
+      border-radius: var(--radius);
+      background: var(--color-surface);
+    }
+    .reading figcaption {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--color-muted);
+    }
+    .note {
+      margin: 0.35rem 0 0.5rem;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    mark {
+      padding: 0.05rem 0.2rem;
+      border-radius: 4px;
+      color: inherit;
+    }
+    mark.for {
+      background: #ffe08a;
+      box-shadow: inset 0 -2px 0 #c58a00;
+    }
+    mark.against {
+      background: #d7ecf7;
+      box-shadow: inset 0 -2px 0 #3d7fa8;
+    }
+    .denied {
+      text-decoration: line-through;
+      text-decoration-thickness: 2px;
+      color: var(--color-muted);
+    }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
+      margin: 0;
+      font-size: 0.8rem;
+    }
+    .follow-up,
+    .detail {
+      margin-top: 0.5rem;
+      padding: 0.75rem;
+      border-radius: var(--radius);
+      border-left: 4px solid var(--priority-high);
+      background: var(--color-surface);
+    }
+    .detail {
+      border-left-color: var(--color-primary);
+    }
+    .follow-up p,
+    .detail p {
+      margin: 0;
+    }
+    .detail ul {
+      margin: 0.35rem 0 0;
+      padding-left: 1.25rem;
+    }
+    .follow-up-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
     .actions {
       display: flex;
       gap: 0.75rem;
@@ -269,6 +408,19 @@ export class EncounterFormPage {
   /** Live suggestion while typing; the saved result is computed again after saving. */
   readonly preview = signal<TriageResult | null>(null);
   readonly explain = explainResult;
+  readonly moreDetail = needsMoreDetail;
+  readonly detailPrompts = DETAIL_PROMPTS;
+  /** The note exactly as the preview evaluated it: highlights point into this text. */
+  private readonly previewText = signal('');
+  readonly segments = computed<NoteSegment[]>(() => {
+    const result = this.preview();
+    return result ? noteSegments(this.previewText(), result) : [];
+  });
+  /** Follow-up questions the promoter answered "no" to, so they are not asked again. */
+  private readonly dismissed = signal<ReadonlySet<keyof AlarmAnswers>>(new Set());
+  readonly pendingFollowUps = computed(() =>
+    (this.preview()?.followUps ?? []).filter((key) => !this.dismissed().has(key)),
+  );
   private previewRun = 0;
 
   readonly isEdit = this.encounterId !== null;
@@ -315,6 +467,23 @@ export class EncounterFormPage {
   invalid(name: FieldName): boolean {
     const control = this.form.controls[name];
     return control.invalid && (control.touched || control.dirty);
+  }
+
+  labelFor(key: keyof AlarmAnswers): string {
+    return ALARM_SIGNS.find((sign) => sign.key === key)?.label ?? key;
+  }
+
+  shortLabelFor(key: keyof AlarmAnswers): string {
+    return ALARM_SIGNS.find((sign) => sign.key === key)?.shortLabel ?? key;
+  }
+
+  /** The promoter confirms the alarm: the rule then decides, as with any marked sign. */
+  markAlarm(key: keyof AlarmAnswers): void {
+    this.form.controls.alarms.controls[key].setValue(true);
+  }
+
+  dismissFollowUp(key: keyof AlarmAnswers): void {
+    this.dismissed.update((keys) => new Set([...keys, key]));
   }
 
   async save(): Promise<void> {
@@ -367,7 +536,10 @@ export class EncounterFormPage {
     const run = ++this.previewRun;
     try {
       const result = await this.triage.classify({ symptoms, alarms });
-      if (run === this.previewRun) this.preview.set(result);
+      if (run === this.previewRun) {
+        this.previewText.set(symptoms);
+        this.preview.set(result);
+      }
     } catch {
       if (run === this.previewRun) this.preview.set(null);
     }
