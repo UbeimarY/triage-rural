@@ -5,6 +5,7 @@ import { ApiClient, describeApiError } from '../../core/api/api-client';
 import { ConnectivityService } from '../../core/connectivity.service';
 import { Priority } from '../../core/db/models';
 import { PriorityBadge } from '../../shared/priority-badge';
+import { AccountsPanel } from './accounts-panel';
 import { Insights } from './insights';
 import { InsightsPanel } from './insights-panel';
 
@@ -36,7 +37,7 @@ type Filter = 'all' | Priority | 'unclassified';
 
 @Component({
   selector: 'app-dashboard-page',
-  imports: [DatePipe, PriorityBadge, InsightsPanel],
+  imports: [DatePipe, PriorityBadge, InsightsPanel, AccountsPanel],
   template: `
     <div class="page-header">
       <h1>Panel de seguimiento</h1>
@@ -138,6 +139,7 @@ type Filter = 'all' | Priority | 'unclassified';
             </section>
           }
         }
+        <app-accounts-panel />
       </div>
 
       <section class="queue" aria-labelledby="queue-title">
