@@ -1,13 +1,28 @@
 import fixtures from './model/equivalence-fixtures.json';
 import { TRIAGE_TEXT_MODEL } from './model';
-import { analyze, decide, predict } from './text-model';
+import { analyze, decide, normalize, predict, tokenize } from './text-model';
+
+const model = TRIAGE_TEXT_MODEL;
+
+function highlighted(text: string): { word: string; negated: boolean; weight: number }[] {
+  return predict(model, text).evidence.map((item) => ({
+    word: text.slice(item.start, item.end),
+    negated: item.negated,
+    weight: item.weight,
+  }));
+}
 
 describe('text model', () => {
-  it('reproduces the probabilities Python computed, case by case', () => {
-    expect(fixtures.version).toBe(TRIAGE_TEXT_MODEL.version);
+  it('builds the same features Python built, case by case', () => {
+    expect(fixtures.version).toBe(model.version);
+    for (const { text, features } of fixtures.cases) {
+      expect(analyze(model, text), text).toEqual(features);
+    }
+  });
 
+  it('reproduces the probabilities Python computed, case by case', () => {
     for (const { text, probabilities } of fixtures.cases) {
-      const prediction = predict(TRIAGE_TEXT_MODEL, text);
+      const prediction = predict(model, text);
       fixtures.classes.forEach((name, i) => {
         const value = prediction.probabilities[name as 'high' | 'medium' | 'low'];
         expect(Math.abs(value - probabilities[i]), `${name} for "${text}"`).toBeLessThan(1e-6);
@@ -15,42 +30,65 @@ describe('text model', () => {
     }
   });
 
-  it('tokenizes like scikit-learn: lowercase, no accents, unigrams then bigrams', () => {
-    expect(analyze('Dolor de CABEZA, ñandú!')).toEqual([
-      'dolor',
-      'de',
-      'cabeza',
-      'nandu',
-      'dolor de',
-      'de cabeza',
-      'cabeza nandu',
-    ]);
+  it('keeps one character per character typed, so highlights land on the right word', () => {
+    const text = 'Niega DOLOR 😷 en el pécho';
+    expect(normalize(text)).toHaveLength(text.length);
+    const pecho = tokenize(text, model.settings).find((token) => token.text === 'pecho')!;
+    expect(text.slice(pecho.start, pecho.end)).toBe('pécho');
   });
 
-  it('flags a clearly urgent description as high', () => {
-    const prediction = predict(
-      TRIAGE_TEXT_MODEL,
-      'Lo mordió una culebra en el pie y se le está hinchando mucho',
+  it('marks denied findings, but not a "no" that describes the symptom', () => {
+    const marks = Object.fromEntries(
+      tokenize('Sin fiebre, pero no puede respirar bien', model.settings).map((t) => [
+        t.text,
+        t.negated,
+      ]),
     );
+    expect(marks['fiebre']).toBe(true);
+    expect(marks['respirar']).toBe(false);
+  });
+
+  it('does not call a note that only denies urgent findings high', () => {
+    for (const text of [
+      'Niega dolor de pecho',
+      'Sin rigidez en el cuello',
+      'No tiene dificultad para respirar ni convulsiones',
+    ]) {
+      expect(predict(model, text).priority, text).not.toBe('high');
+    }
+  });
+
+  it('still recognises an urgent case written with typos', () => {
+    expect(predict(model, 'lo mordio una culevra en el pie y se esta inchando').priority).toBe(
+      'high',
+    );
+  });
+
+  it('flags a clearly urgent description as high and explains it with its own words', () => {
+    const text = 'Lo mordió una culebra en el pie y se le está hinchando mucho';
+    const prediction = predict(model, text);
 
     expect(prediction.priority).toBe('high');
-    expect(prediction.topTerms.length).toBeGreaterThan(0);
+    expect(prediction.topTerms).toContain('culebra');
+    expect(highlighted(text).find((item) => item.word === 'culebra')!.weight).toBeGreaterThan(0);
   });
 
-  it('explains with meaningful words, never with function words alone', () => {
-    const { topTerms } = predict(
-      TRIAGE_TEXT_MODEL,
-      'Tos con flema verde y fiebre desde hace una semana',
+  it('never highlights function words', () => {
+    const words = highlighted('Tos con flema verde y fiebre desde hace una semana').map(
+      (item) => item.word,
     );
-
-    expect(topTerms).not.toContain('con');
-    expect(topTerms.length).toBeGreaterThan(0);
+    expect(words).not.toContain('con');
+    expect(words).toContain('fiebre');
   });
 
   it('keeps a routine visit low', () => {
-    expect(
-      predict(TRIAGE_TEXT_MODEL, 'Viene a control de la presión, se siente bien').priority,
-    ).toBe('low');
+    expect(predict(model, 'Viene a control de la presión, se siente bien').priority).toBe('low');
+  });
+
+  it('falls back to medium when it knows none of the words', () => {
+    const prediction = predict(model, 'xyzzy qwrtp');
+    expect(prediction.known).toBe(false);
+    expect(prediction.priority).toBe('medium');
   });
 
   it('chooses high once its probability reaches the threshold, even if it is not the largest', () => {

@@ -47,7 +47,28 @@ describe('classify with the text model', () => {
 
     expect(result.source).toBe('model');
     expect(result.priority).toBe('high');
-    expect(result.modelVersion).toBe('triage-text-v1');
+    expect(result.modelVersion).toBe('triage-text-v2');
     expect(result.reasonCodes).toEqual(['MODEL_PREDICTION']);
+  });
+
+  it('asks again about an alarm the note mentions but the promoter left unmarked', () => {
+    const result = classify(
+      { symptoms: 'Le duele el pecho desde anoche y sangra por la nariz', alarms: NO_ALARMS },
+      TRIAGE_TEXT_MODEL,
+    );
+
+    expect(result.followUps).toEqual(['chestPain', 'severeBleeding']);
+  });
+
+  it('does not ask about an alarm the note denies or the promoter already marked', () => {
+    const result = classify(
+      {
+        symptoms: 'Niega dolor de pecho, sangra un poco por una herida',
+        alarms: { ...NO_ALARMS, severeBleeding: true },
+      },
+      TRIAGE_TEXT_MODEL,
+    );
+
+    expect(result.followUps).toEqual([]);
   });
 });

@@ -72,6 +72,17 @@ export type TriageSource = 'rules' | 'model';
 /** Stable codes: the UI translates them into Spanish. */
 export type TriageReasonCode = 'ALARM_SIGNS_PRESENT' | 'NO_ALARM_SIGNS' | 'MODEL_PREDICTION';
 
+/** A word of the symptoms note and how much it weighed in the model's suggestion. */
+export interface Evidence {
+  /** UTF-16 offsets into the symptoms text. */
+  start: number;
+  end: number;
+  /** Written as absent ("sin fiebre", "niega dolor"). */
+  negated: boolean;
+  /** Push toward the suggested priority: positive supports it, negative argues against it. */
+  weight: number;
+}
+
 export interface TriageResult {
   priority: Priority;
   source: TriageSource;
@@ -83,6 +94,15 @@ export interface TriageResult {
   probabilities?: Record<Priority, number>;
   /** Model decisions only: the words that weighed the most (the explanation). */
   topTerms?: string[];
+  /** Model decisions only: every content word with its weight, to highlight the note. */
+  evidence?: Evidence[];
+  /** False when the model knew none of the words, so it kept the safe default. */
+  knownText?: boolean;
+  /**
+   * Alarm questions left unmarked although the note mentions them ("le duele el pecho"):
+   * the app asks the promoter to check them. They never raise the priority on their own.
+   */
+  followUps?: (keyof AlarmAnswers)[];
   elapsedMs: number;
 }
 

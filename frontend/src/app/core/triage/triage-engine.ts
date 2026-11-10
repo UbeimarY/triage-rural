@@ -1,5 +1,6 @@
 import { AlarmAnswers, TriageResult } from '../db/models';
-import { predict, TextModel } from './text-model';
+import { alarmFollowUps } from './alarm-hints';
+import { predict, TextModel, tokenize } from './text-model';
 import { TriageRequest } from './triage-protocol';
 
 type Classification = Omit<TriageResult, 'elapsedMs'>;
@@ -12,6 +13,9 @@ type Classification = Omit<TriageResult, 'elapsedMs'>;
  *  1. Alarm-sign rules (explicit yes/no questions) always win: any alarm means high.
  *  2. Without alarms, the on-device text model suggests a priority.
  *  3. The health promoter reviews every suggestion (see reviewAssessment).
+ *
+ * Alarm questions the note mentions but the promoter left unmarked come back as
+ * follow-ups: the app asks again, it never marks them itself.
  */
 export function classify(
   input: Pick<TriageRequest, 'symptoms' | 'alarms'>,
@@ -21,6 +25,10 @@ export function classify(
     (key) => input.alarms[key],
   );
 
+  const followUps = model
+    ? alarmFollowUps(tokenize(input.symptoms, model.settings), input.alarms)
+    : [];
+
   if (triggeredAlarms.length > 0) {
     return {
       priority: 'high',
@@ -28,6 +36,7 @@ export function classify(
       triggeredAlarms,
       reasonCodes: ['ALARM_SIGNS_PRESENT'],
       modelVersion: null,
+      followUps,
     };
   }
 
@@ -41,6 +50,9 @@ export function classify(
       modelVersion: model.version,
       probabilities: prediction.probabilities,
       topTerms: prediction.topTerms,
+      evidence: prediction.evidence,
+      knownText: prediction.known,
+      followUps,
     };
   }
 

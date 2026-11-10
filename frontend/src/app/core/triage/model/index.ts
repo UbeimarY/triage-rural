@@ -1,5 +1,5 @@
 import { compileModel } from '../text-model';
-import modelJson from './triage-text-v1.json';
+import modelJson from './triage-text-v2.json';
 
 /**
  * The trained model ships inside the JavaScript bundle, so the service worker
